@@ -78,7 +78,24 @@ void rotator_turn2target(int target)
     if (target == -1) return;
 
     ESP_LOGI(TAG,"received turn to %d command", target);
-    targetAzim = target;
+    // we are close to cw end and target is close to ccw end,
+    // then turn to closest end.
+    // example1: currentAzim = 357 and target = 3 --> dont turn a long turn, instead turn to cw endpoint ie 360.
+    int beamWidth = 10 / 2;
+    if (((360 - currAzim) < 90) && (target < beamWidth))
+    {
+        ESP_LOGI(TAG,"optimising long ccw rotation to short cw rotation");
+        targetAzim = 360;
+    }
+    // example2: currentAzim = 3 and target = 357 --> dont turn a long turn, instead turn to ccw endpoint ie 0.
+    else if (((360 - currAzim) > (360 - 90)) && target > (360 - beamWidth))
+    {
+        ESP_LOGI(TAG,"optimising long cw rotation to short ccw rotation");
+        targetAzim = 0;
+    }
+    else
+        targetAzim = target;
+
     if (targetAzim > currAzim)
     {
         if (turningCCW)

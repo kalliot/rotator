@@ -100,10 +100,26 @@ static int retry_num = 0;
 static char *program_version = "";
 static char appname[20];
 nvs_handle setup_flash;
+static int correction = 60; // pot zero is 60 degrees in antenna.
 
 static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid);
 static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid);
 
+static int correct2pot(int request)
+{
+    if (request < correction)
+        return request - correction +360;
+    else
+        return request - correction;
+}
+
+static int correct2disp(int implementation)
+{
+    if (implementation + correction > 360)
+        return implementation + correction - 360;
+    else
+        return implementation + correction;
+}
 
 static char *getJsonStr(cJSON *js, char *name)
 {
@@ -118,29 +134,6 @@ static char *getJsonStr(cJSON *js, char *name)
     }
     else ESP_LOGI(TAG,"%s not found from json", name);
     return "\0";
-}
-
-static bool getJsonFloat(cJSON *js, char *name, float *val)
-{
-    bool ret = false;
-
-    cJSON *item = cJSON_GetObjectItem(js, name);
-    if (item != NULL)
-    {
-        if (cJSON_IsNumber(item))
-        {
-            if (item->valuedouble != *val)
-            {
-                ret = true;
-                *val = item->valuedouble;
-                ESP_LOGI(TAG,"received variable %s:%2.2f", name, item->valuedouble);
-            }
-            ESP_LOGI(TAG,"%s is not changed", name);
-        }
-        else ESP_LOGI(TAG,"%s is not a number", name);
-    }
-    else ESP_LOGI(TAG,"%s not found from json", name);
-    return ret;
 }
 
 static bool getJsonInt(cJSON *js, char *name, int *val)
@@ -226,10 +219,17 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         int target = -1;
         if (getJsonInt(root,"degr",&target))
         {
-            display_printf("got target %d", target);
-            pot_set_tolerance(1);
-            rotator_turn2target(target);
-        }    
+            if (target < 0 || target > 360)
+            {
+                display_printf("invalid degrees requested %d", target); // do nothing.
+            }
+            else
+            {
+                display_printf("got target %d", target);
+                pot_set_tolerance(1);
+                rotator_turn2target(correct2pot(target));
+            }
+        }
     }
     cJSON_Delete(root);
     return ret;
@@ -624,12 +624,12 @@ void app_main(void)
                 switch (meas.id) {
                     case AZIMUTH:
                         azimuth = meas.data.azimuth;
-                        display_printf("azim = %d", azimuth);
+                        display_printf("azim = %d", correct2disp(azimuth));
                         if (!rotator_turned(azimuth))
                         {
                             pot_set_tolerance(4);
                         }    
-                        if (isConnected) sendAzimuth(client, chipid, azimuth, now);
+                        if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), now);
                     break;
 
                     case ROTATORSTATE:
