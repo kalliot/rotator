@@ -1,3 +1,9 @@
+// goal: 9.10.2026
+// rotation with physical buttons.
+// rotation with json
+// rotation with predefined position (names), a table of known sites.
+
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -42,6 +48,7 @@
 #include "display.h"
 #include "potreader.h"
 #include "rotator.h"
+#include "statereader.h"
 #include "statistics/statistics.h"
 
 #define STATISTICS_INTERVAL 1800
@@ -172,7 +179,7 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
     gpio_set_level(BLINK_GPIO, true);
     char targetTopic[60];
     int retain=1;
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"ts\":%jd,\"unit\":\"Degr\"}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/parameters/azimuth", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
 
@@ -204,34 +211,46 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
     if (root != NULL)
     {
         strcpy(id,getJsonStr(root,"id"));
-    }
-    if (!strcmp(id,"otaupdate"))
-    {
-        char *fname = getJsonStr(root,"file");
-        if (strlen(fname) > 5)
+        if (!strcmp(id,"otaupdate"))
         {
-            ota_start(fname);
-        }
-    }
-    // { "id":"newtarget","degr":90}
-    if (!strcmp(id,"newtarget"))
-    {
-        int target = -1;
-        if (getJsonInt(root,"degr",&target))
-        {
-            if (target < 0 || target > 360)
+            char *fname = getJsonStr(root,"file");
+            if (strlen(fname) > 5)
             {
-                display_printf("invalid degrees requested %d", target); // do nothing.
+                ota_start(fname);
+            }
+        }
+        // { "id":"newtarget","degr":90}
+        if (!strcmp(id,"newtarget"))
+        {
+            int target = -1;
+            if (getJsonInt(root,"degr",&target))
+            {
+                if (target < 0 || target > 360)
+                {
+                    display_printf("invalid degrees requested %d", target); // do nothing.
+                }
+                else
+                {
+                    display_printf("got target %d", target);
+                    pot_set_tolerance(1);
+                    rotator_turn2target(correct2pot(target));
+                }
+            }
+        }
+        // { "id":"turn","direction":"CW"}
+        if (!strcmp(id,"turn"))
+        {
+            if (rotator_turn(getJsonStr(root,"direction")))
+            {
+                pot_set_tolerance(1);
             }
             else
             {
-                display_printf("got target %d", target);
-                pot_set_tolerance(1);
-                rotator_turn2target(correct2pot(target));
+                pot_set_tolerance(4);
             }
         }
+        cJSON_Delete(root);
     }
-    cJSON_Delete(root);
     return ret;
 }
 
@@ -544,6 +563,7 @@ void app_main(void)
         evt_queue = xQueueCreate(10, sizeof(struct measurement));
         gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
         factoryreset_init();
+        stateread_init(3);
         wifi_connect(comminfo->ssid, comminfo->password);
         readSetup();
         esp_mqtt_client_handle_t client = mqtt_app_start(chipid);
@@ -585,6 +605,8 @@ void app_main(void)
         display_printf("%s started", appname);
         int azimuth = pot_get_azimuth();
         rotator_init(chipid);
+        stateread_start(0, 12);
+        stateread_start(1, 13);
 
         while (1)
         {
@@ -630,6 +652,22 @@ void app_main(void)
                             pot_set_tolerance(4);
                         }    
                         if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), now);
+                    break;
+
+                    case STATE:
+                        ESP_LOGI(TAG,"got buttonstate %d, state=%d", meas.gpio, meas.data.state);
+                        if (meas.data.state)
+                        {
+                            pot_set_tolerance(1);
+                            if (meas.gpio == 12) rotator_turn("cw");
+                            if (meas.gpio == 13) rotator_turn("ccw");
+                        }
+                        else
+                        {
+                            rotator_turn("still");
+                            pot_set_tolerance(4);
+                        }
+                        stateread_done(&meas);
                     break;
 
                     case ROTATORSTATE:

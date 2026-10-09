@@ -7,6 +7,7 @@
 #include "statistics/statistics.h"
 
 
+
 static int targetAzim = -1;
 static int currAzim = -1;
 static bool turningCW = false;
@@ -17,7 +18,7 @@ static uint8_t *chipid;
 static const char *TAG = "ROT_ROTATOR";
 
 
-static void queue_state(enum states state)
+static void queue_state(enum directionStates state)
 {
     struct measurement meas;
     meas.id = ROTATORSTATE;
@@ -25,30 +26,46 @@ static void queue_state(enum states state)
     xQueueSend(evt_queue, &meas, 0);
 }
 
+enum machine_states
+{
+    SM_TARGET,
+    SM_BUTTON
+} stateMachine;
+
 struct stateRec 
 {
-    enum states state;
+    enum directionStates state;
     char *statename;
-};
-
-struct stateRec stateStrings[] =
+} stateStrings[] =
 { 
     { STATE_STILL, "still"},
     { STATE_CW, "cw"},
-    { STATE_CCW, "ccw"}
+    { STATE_CCW, "ccw"},
+    { STATE_NONE, "none"}
 };    
 
-static char *stateStr(enum states state)
+static char *stateStr(enum directionStates state)
 {
-    for (int i=0; i<3; i++)
+    int i;
+
+    for (i=0; stateStrings[i].state != STATE_NONE; i++)
     {
-        if (stateStrings[i].state == state)
-        {
-            return stateStrings[i].statename;
-        }
+        if (stateStrings[i].state == state) break;
     }
-    return "none";
+    return stateStrings[i].statename;
 }
+
+static enum directionStates str2state(char *str)
+{
+    int i;
+
+    for (i=0; stateStrings[i].state != STATE_NONE; i++)
+    {
+        if (!strcmp(stateStrings[i].statename, str)) break;
+    }
+    return stateStrings[i].state;
+}
+
 
 void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_client_handle_t client)
 {
@@ -70,6 +87,67 @@ void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_cli
                 now);
     esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
+}
+
+
+static void start_turning(enum directionStates direction)
+{
+    switch (direction)
+    {
+        case STATE_CW:
+            gpio_set_level(TURNCW_GPIO, true);
+            turningCW = true;
+        break;
+
+        case STATE_CCW:
+            gpio_set_level(TURNCCW_GPIO, true);
+            turningCCW = true;
+        break;
+
+        default: return;
+    }
+    queue_state(direction);
+}
+
+static void stop_turning(void)
+{
+    gpio_set_level(TURNCCW_GPIO, false);
+    gpio_set_level(TURNCW_GPIO, false);
+    queue_state(STATE_STILL);
+    turningCCW = false;
+    turningCW = false;
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
+
+bool rotator_turn(char *dirStr)
+{
+    bool ret = false;
+    enum directionStates direction = str2state(dirStr);
+    switch (direction)
+    {
+        case STATE_CCW:
+            if (turningCW) stop_turning();
+            stateMachine = SM_BUTTON;
+            start_turning(STATE_CCW);
+            ret = true;
+        break;
+
+        case STATE_CW:
+            if (turningCCW) stop_turning();
+            stateMachine = SM_BUTTON;
+            start_turning(STATE_CW);
+            ret = true;
+        break;
+
+        case STATE_STILL:
+            stop_turning();
+        break;
+
+        case STATE_NONE:
+            ESP_LOGI(TAG,"unknown turning direction, nothing done");
+        break;
+    }
+    return ret;
 }
 
 
@@ -98,53 +176,40 @@ void rotator_turn2target(int target)
 
     if (targetAzim > currAzim)
     {
-        if (turningCCW)
-        {
-            gpio_set_level(TURNCCW_GPIO, false);
-            queue_state(STATE_STILL);
-            turningCCW = false;
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-        gpio_set_level(TURNCW_GPIO, true);
-        turningCW = true;
-        queue_state(STATE_CW);
+        if (turningCCW) stop_turning();
+        start_turning(STATE_CW);
+        stateMachine = SM_TARGET;
     }
-    else
+    else if (targetAzim < currAzim)
     {           
-        if (turningCW)
-        {
-            gpio_set_level(TURNCW_GPIO, false);
-            queue_state(STATE_STILL);
-            turningCW = false;
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-        gpio_set_level(TURNCCW_GPIO, true);
-        turningCCW = true;
-        queue_state(STATE_CCW);
+        if (turningCW) stop_turning();
+        start_turning(STATE_CCW);
+        stateMachine = SM_TARGET;
     }
+    // if targetAzim == currAzim   ---> nothing done
 }
 
 bool rotator_turned(int azim)
 {
     bool ret = true;
-    if (turningCW && azim >= targetAzim)
+
+    if (stateMachine == SM_TARGET)
     {
-        gpio_set_level(TURNCW_GPIO, false);
-        turningCW = false;
-        queue_state(STATE_STILL);
-        ESP_LOGI(TAG,"ended turn cw to target %d, azim=%d", targetAzim, azim);
-        ret = false;
+        if (turningCW && azim >= targetAzim)
+        {
+            stop_turning();
+            ESP_LOGI(TAG,"ended turn cw to target %d, azim=%d", targetAzim, azim);
+            ret = false;
+        }
+        if (turningCCW && azim <= targetAzim)
+        {
+            stop_turning();
+            ESP_LOGI(TAG,"ended turn ccw to target %d, azim=%d", targetAzim, azim);
+            ret = false;
+        }
+        currAzim = azim;
     }
-    if (turningCCW && azim <= targetAzim)
-    {
-        gpio_set_level(TURNCCW_GPIO, false);
-        turningCCW = false;
-        queue_state(STATE_STILL);
-        ESP_LOGI(TAG,"ended turn ccw to target %d, azim=%d", targetAzim, azim);
-        ret = false;
-    }    
-    currAzim = azim;
-    return ret;
+    return ret; // true, if we still want to continue
 }
 
 void rotator_init(uint8_t *chip)

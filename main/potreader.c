@@ -17,7 +17,6 @@
 
 static adc_oneshot_unit_handle_t adc1_handle;
 static uint8_t *chipid;
-static char azimuthTopic[64];
 static int sampleInterval = 1000;
 static int azimuth;
 static int samplecnt = 10;

@@ -13,14 +13,16 @@ enum meastype
 {
     AZIMUTH,
     ROTATORSTATE,
+    STATE,
     OTA
 };
 
-enum states 
+enum directionStates
 {
     STATE_STILL,
     STATE_CW,
-    STATE_CCW
+    STATE_CCW,
+    STATE_NONE
 };
 
 
@@ -31,7 +33,8 @@ struct measurement {
 
     union {
         int count;
-        enum states rotatorstate;
+        int state;
+        enum directionStates rotatorstate;
         int azimuth;
     } data;
 };
