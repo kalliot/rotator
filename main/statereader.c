@@ -5,7 +5,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "driver/gpio.h"
-#include "soc/frc_timer_reg.h"
+//#include "soc/frc_timer_reg.h"
 #include "esp_log.h"
 #include "homeapp.h"
 #include "statereader.h"

@@ -119,10 +119,11 @@ static void stop_turning(void)
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
 
-bool rotator_turn(char *dirStr)
+
+
+bool rotator_turn(enum directionStates direction)
 {
     bool ret = false;
-    enum directionStates direction = str2state(dirStr);
     switch (direction)
     {
         case STATE_CCW:
@@ -150,6 +151,10 @@ bool rotator_turn(char *dirStr)
     return ret;
 }
 
+bool rotator_turn_bystr(char *dirStr)
+{
+    return rotator_turn(str2state(dirStr));
+}
 
 void rotator_turn2target(int target)
 {

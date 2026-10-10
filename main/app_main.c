@@ -240,7 +240,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         // { "id":"turn","direction":"CW"}
         if (!strcmp(id,"turn"))
         {
-            if (rotator_turn(getJsonStr(root,"direction")))
+            if (rotator_turn_bystr(getJsonStr(root,"direction")))
             {
                 pot_set_tolerance(1);
             }
@@ -659,12 +659,12 @@ void app_main(void)
                         if (meas.data.state)
                         {
                             pot_set_tolerance(1);
-                            if (meas.gpio == 12) rotator_turn("cw");
-                            if (meas.gpio == 13) rotator_turn("ccw");
+                            if (meas.gpio == 12) rotator_turn(STATE_CW);
+                            if (meas.gpio == 13) rotator_turn(STATE_CCW);
                         }
                         else
                         {
-                            rotator_turn("still");
+                            rotator_turn(STATE_STILL);
                             pot_set_tolerance(4);
                         }
                         stateread_done(&meas);
