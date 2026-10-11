@@ -122,6 +122,10 @@ int pot_get_calibr_high(int *azim)
     return calibr[CAL_MAX].raw;
 }
 
+void pot_send_azimuth(void)
+{
+    queue_measurement(convert(pot_read()),0);
+}
 
 bool pot_save_calibrations(void)
 {

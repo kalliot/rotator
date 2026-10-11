@@ -88,6 +88,20 @@ struct netinfo {
     char *mqtt_prefix;
 };
 
+struct directionNames
+{
+    char name[12];
+    int azimuth;
+} interestingDirections[] =
+{
+    {"Lahti",    280},
+    {"Inkoo",    200},
+    {"Vantaa",   195},
+    {"Tallinna", 190},
+    {"Tukholma", 255},
+    {"Pori",     285},
+    {"Aurora",   0},
+};
 
 // globals
 
@@ -173,13 +187,39 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
-
-static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, time_t now)
+static char *find_namedByAzimuth(int azimuth)
 {
-    gpio_set_level(BLINK_GPIO, true);
+    int diff;
+    int closest = 360;
+    int closestIndex = -1;
+
+    for (int i=0; i < 7;i++)
+    {
+        diff = abs(interestingDirections[i].azimuth - azimuth);
+        if (diff < closest)
+        {
+            closest = diff;
+            closestIndex = i;
+        }
+        if (closest < 6)
+        {
+            return interestingDirections[closestIndex].name;
+        }
+    }
+    if (closest < 4)
+    {
+        return interestingDirections[closestIndex].name;
+    }
+    return "-";
+}
+
+
+static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, time_t now)
+{
     char targetTopic[60];
     int retain=1;
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"ts\":%jd}";
+    
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/parameters/azimuth", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
 
@@ -191,12 +231,25 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
     sprintf(jsondata, datafmt,
                 chipid[3],chipid[4],chipid[5],
                 azimuth,
+                name,
                 now);
     esp_mqtt_client_publish(client, targetTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
-    gpio_set_level(BLINK_GPIO, false);
+
     return true;
 }
+
+
+static int find_namedByName(char *name)
+{
+    for (int i=0; i < 7;i++)
+    {
+        if (!strcmp(interestingDirections[i].name, name))
+            return interestingDirections[i].azimuth;
+    }
+    return -1;
+}
+
 
 
 static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
@@ -237,6 +290,27 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 }
             }
         }
+        if (!strcmp(id,"namedtarget"))
+        {
+            char name[20];
+            int target;
+
+            strcpy(name, getJsonStr(root,"name"));
+            target = find_namedByName(name);
+            if (target != -1)
+            {
+                display_printf("turn to %s", name);
+                {
+                    pot_set_tolerance(1);
+                    rotator_turn2target(correct2pot(target));
+                }
+            }
+            else
+            {
+                ESP_LOGI(TAG,"target %s is unknown", name);
+            }
+        }
+
         // { "id":"turn","direction":"CW"}
         if (!strcmp(id,"turn"))
         {
@@ -294,7 +368,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         time_t now;
 
         time(&now);
-        sendAzimuth(client, (uint8_t *) handler_args, azimuth, now);
+        int corrected = correct2disp(azimuth);
+        char *name = find_namedByAzimuth(corrected);
+        sendAzimuth(client, (uint8_t *) handler_args, corrected, name, now);
 
         healthyflags |= HEALTHYFLAGS_MQTT;
         break;
@@ -563,7 +639,7 @@ void app_main(void)
         evt_queue = xQueueCreate(10, sizeof(struct measurement));
         gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
         factoryreset_init();
-        stateread_init(3);
+        stateread_init(2);
         wifi_connect(comminfo->ssid, comminfo->password);
         readSetup();
         esp_mqtt_client_handle_t client = mqtt_app_start(chipid);
@@ -646,12 +722,14 @@ void app_main(void)
                 switch (meas.id) {
                     case AZIMUTH:
                         azimuth = meas.data.azimuth;
-                        display_printf("azim = %d", correct2disp(azimuth));
+                        int corrected = correct2disp(azimuth);
+                        char *name = find_namedByAzimuth(corrected);
+                        display_printf("azim = %d %s", corrected ,name);
                         if (!rotator_turned(azimuth))
                         {
                             pot_set_tolerance(4);
                         }    
-                        if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), now);
+                        if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), name, now);
                     break;
 
                     case STATE:
@@ -659,8 +737,8 @@ void app_main(void)
                         if (meas.data.state)
                         {
                             pot_set_tolerance(1);
-                            if (meas.gpio == 12) rotator_turn(STATE_CW);
-                            if (meas.gpio == 13) rotator_turn(STATE_CCW);
+                            if (meas.gpio == 13) rotator_turn(STATE_CW);
+                            if (meas.gpio == 12) rotator_turn(STATE_CCW);
                         }
                         else
                         {

@@ -13,6 +13,7 @@ enum meastype
 {
     AZIMUTH,
     ROTATORSTATE,
+    REFRESHPOS,
     STATE,
     OTA
 };

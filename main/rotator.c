@@ -1,6 +1,7 @@
 
 #include <time.h>
 #include "driver/gpio.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "homeapp.h"
 #include "potreader.h"
@@ -12,9 +13,12 @@ static int targetAzim = -1;
 static int currAzim = -1;
 static bool turningCW = false;
 static bool turningCCW = false;
+static bool initDone = false;
 static char stateTopic[64];
 static uint8_t *chipid;
-
+static int inertia = 2000; // in milliseconds
+static esp_timer_handle_t start_cw;
+static esp_timer_handle_t start_ccw;
 static const char *TAG = "ROT_ROTATOR";
 
 
@@ -104,10 +108,28 @@ static void start_turning(enum directionStates direction)
             turningCCW = true;
         break;
 
-        default: return;
+        default:
+            ESP_LOGI(TAG,"unknown turning direction, nothing done!");
+            return;
     }
     queue_state(direction);
 }
+
+static void start_timered_turn_callback(void *arg)
+{
+    enum directionStates *direction = (enum directionStates *) arg;
+    start_turning(*direction);
+}
+
+/*
+static void send_timered_position_callback(void *arg)
+{
+    ESP_LOGI(TAG,"timered azimuth is being sent");
+    currAzim = pot_get_azimuth();
+    pot_send_azimuth();
+    return;
+}
+*/
 
 static void stop_turning(void)
 {
@@ -116,32 +138,43 @@ static void stop_turning(void)
     queue_state(STATE_STILL);
     turningCCW = false;
     turningCW = false;
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
-
 
 
 bool rotator_turn(enum directionStates direction)
 {
     bool ret = false;
+
+    if (!initDone) return false;
+
     switch (direction)
     {
         case STATE_CCW:
-            if (turningCW) stop_turning();
+            if (turningCW)
+            {   stop_turning();
+                ESP_ERROR_CHECK(esp_timer_start_once(start_ccw, inertia * 1000));
+            }
+            else start_turning(STATE_CCW);
             stateMachine = SM_BUTTON;
-            start_turning(STATE_CCW);
             ret = true;
         break;
 
         case STATE_CW:
-            if (turningCCW) stop_turning();
+            if (turningCCW)
+            {
+                stop_turning();
+                ESP_ERROR_CHECK(esp_timer_start_once(start_cw, inertia * 1000));
+            }
+            else start_turning(STATE_CW);
             stateMachine = SM_BUTTON;
-            start_turning(STATE_CW);
             ret = true;
         break;
 
         case STATE_STILL:
+            esp_timer_stop(start_ccw);
+            esp_timer_stop(start_cw);
             stop_turning();
+            vTaskDelay(inertia / portTICK_PERIOD_MS);
         break;
 
         case STATE_NONE:
@@ -181,14 +214,21 @@ void rotator_turn2target(int target)
 
     if (targetAzim > currAzim)
     {
-        if (turningCCW) stop_turning();
-        start_turning(STATE_CW);
+        if (turningCCW)
+        {   stop_turning();
+            ESP_ERROR_CHECK(esp_timer_start_once(start_cw,  inertia * 1000));
+        }
+        else start_turning(STATE_CW);
         stateMachine = SM_TARGET;
     }
     else if (targetAzim < currAzim)
-    {           
-        if (turningCW) stop_turning();
-        start_turning(STATE_CCW);
+    {
+        if (turningCW)
+        {
+            stop_turning();
+            ESP_ERROR_CHECK(esp_timer_start_once(start_ccw,  inertia * 1000));
+        }
+        else start_turning(STATE_CCW);
         stateMachine = SM_TARGET;
     }
     // if targetAzim == currAzim   ---> nothing done
@@ -219,6 +259,25 @@ bool rotator_turned(int azim)
 
 void rotator_init(uint8_t *chip)
 {
+    static enum directionStates cw = STATE_CW;
+    static enum directionStates ccw = STATE_CCW;
+
+    const esp_timer_create_args_t start_ccw_args =
+    {
+        .callback = start_timered_turn_callback,
+        .arg = (void *) &ccw,
+        .name = "start_ccw_timer"
+    };
+    const esp_timer_create_args_t start_cw_args =
+    {
+        .callback = start_timered_turn_callback,
+        .arg = (void *) &cw,
+        .name = "start_cw_timer"
+    };
+
     chipid = chip;
     currAzim = pot_get_azimuth();
+    esp_timer_create(&start_cw_args, &start_cw);
+    esp_timer_create(&start_ccw_args, &start_ccw);
+    initDone = true;
 }
