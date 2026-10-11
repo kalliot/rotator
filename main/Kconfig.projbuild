@@ -1,5 +1,34 @@
 menu "Rotator configuration"
 
+    config CCWBUTTON_GPIO
+        int "Gpio for turn counterclockwise button"
+        range 0 36
+        default 12
+        help
+            This handles the ccw button.
+
+    config CWBUTTON_GPIO
+        int "Gpio for turn clockwise button"
+        range 0 36
+        default 13
+        help
+            This handles the cw button.
+
+
+    config CCWRELAY_GPIO
+        int "Gpio for turn counterclockwise relay"
+        range 0 36
+        default 17
+        help
+            This handles the ccw relay.
+
+    config CWRELAY_GPIO
+        int "Gpio for turn clockwise relay"
+        range 0 36
+        default 16
+        help
+            This handles the cw relay.
+
     config ESP_WIFI_SSID
         string "WiFi SSID"
         default "myssid"

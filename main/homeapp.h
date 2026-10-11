@@ -44,9 +44,11 @@ extern QueueHandle_t evt_queue;
 extern char jsondata[];
 extern nvs_handle setup_flash;
 
-#define BLINK_GPIO         23
-#define TURNCW_GPIO        16
-#define TURNCCW_GPIO       17
+#define BLINK_GPIO      23
+#define CWBUTTON_GPIO   CONFIG_CWBUTTON_GPIO
+#define CCWBUTTON_GPIO  CONFIG_CCWBUTTON_GPIO
+#define CWRELAY_GPIO    CONFIG_CWRELAY_GPIO
+#define CCWRELAY_GPIO   CONFIG_CCWRELAY_GPIO
 #define MIN_EPOCH   1650000000
 
 #endif

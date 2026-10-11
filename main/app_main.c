@@ -101,6 +101,7 @@ struct directionNames
     {"Tukholma", 255},
     {"Pori",     285},
     {"Aurora",   0},
+    {"-",        0},
 };
 
 // globals
@@ -201,12 +202,8 @@ static char *find_namedByAzimuth(int azimuth)
             closest = diff;
             closestIndex = i;
         }
-        if (closest < 6)
-        {
-            return interestingDirections[closestIndex].name;
-        }
     }
-    if (closest < 4)
+    if (closest < 5)
     {
         return interestingDirections[closestIndex].name;
     }
@@ -251,6 +248,35 @@ static int find_namedByName(char *name)
 }
 
 
+static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid)
+{
+    char topic[60];
+    int retain=1;
+    time_t now;
+
+    time(&now);
+
+    if (now < MIN_EPOCH)
+    {
+        retain = 0;
+        now = 0;
+    }
+    sprintf(topic,"%s/%s/%x%x%x/setup/names", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"ts\":%jd,\"names\":[";
+    sprintf(jsondata, datafmt, chipid[3], chipid[4], chipid[5], now);
+    strcat(jsondata,"[");
+    for (int i=0; i < 7;i++)
+    {
+        if (interestingDirections[i].name[0] != '-')
+        {
+            sprintf(&jsondata[strlen(jsondata)],"{\"name\":\"%s\",\"azimuth\":%d},", interestingDirections[i].name, interestingDirections[i].azimuth);
+        }
+    }
+    jsondata[strlen(jsondata)-1]=0;
+    strcat(jsondata,"]}");
+    esp_mqtt_client_publish(client, topic, jsondata , 0, 0, retain);
+}
+
 
 static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
 {
@@ -285,8 +311,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 else
                 {
                     display_printf("got target %d", target);
-                    pot_set_tolerance(1);
-                    rotator_turn2target(correct2pot(target));
+                    if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
                 }
             }
         }
@@ -301,8 +326,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             {
                 display_printf("turn to %s", name);
                 {
-                    pot_set_tolerance(1);
-                    rotator_turn2target(correct2pot(target));
+                    if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
                 }
             }
             else
@@ -454,8 +478,6 @@ int getWifiStrength(void)
 
 static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid)
 {
-    gpio_set_level(BLINK_GPIO, true);
-
     char infoTopic[42];
 
     sprintf(infoTopic,"%s/%s/%x%x%x/info",
@@ -467,16 +489,8 @@ static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid)
                 program_version);
     esp_mqtt_client_publish(client, infoTopic, jsondata , 0, 0, 1);
     statistics_getptr()->sendcnt++;
-    gpio_set_level(BLINK_GPIO, false);
 }
 
-
-
-static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid)
-{
-    gpio_set_level(BLINK_GPIO, true);
-    gpio_set_level(BLINK_GPIO, false);
-}
 
 static esp_mqtt_client_handle_t mqtt_app_start(uint8_t *chipid)
 {
@@ -595,7 +609,7 @@ static void get_appname(void)
 void app_main(void)
 {
     uint8_t chipid[8];
-    time_t now, prevStatsTs;
+    time_t now, prevStatsTs, stoppedTs = 0;
     adc_oneshot_unit_handle_t adc_handle;
 
     esp_efuse_mac_get_default(chipid);
@@ -617,12 +631,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     gpio_reset_pin(BLINK_GPIO);
-    gpio_reset_pin(TURNCW_GPIO);
-    gpio_reset_pin(TURNCCW_GPIO);
-
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_direction(TURNCW_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_direction(TURNCCW_GPIO, GPIO_MODE_OUTPUT);
 
     get_appname();
     comminfo = get_networkinfo();
@@ -681,8 +690,8 @@ void app_main(void)
         display_printf("%s started", appname);
         int azimuth = pot_get_azimuth();
         rotator_init(chipid);
-        stateread_start(0, 12);
-        stateread_start(1, 13);
+        stateread_start(0, CCWBUTTON_GPIO);
+        stateread_start(1, CWBUTTON_GPIO);
 
         while (1)
         {
@@ -710,7 +719,14 @@ void app_main(void)
                     }
                 }
             }
-            if(xQueueReceive(evt_queue, &meas, STATISTICS_INTERVAL * 1000 / portTICK_PERIOD_MS)) 
+            if (stoppedTs && (now - stoppedTs) > 4)
+            {
+                ESP_LOGI(TAG, "after inertia, send azimuth");
+                stoppedTs = 0;
+                pot_send_azimuth();
+                pot_set_tolerance(4);
+            }
+            if(xQueueReceive(evt_queue, &meas, 5 * 1000 / portTICK_PERIOD_MS))
             {
                 time(&now);
                 uint16_t qcnt = uxQueueMessagesWaiting(evt_queue);
@@ -727,7 +743,7 @@ void app_main(void)
                         display_printf("azim = %d %s", corrected ,name);
                         if (!rotator_turned(azimuth))
                         {
-                            pot_set_tolerance(4);
+                            stoppedTs = now;
                         }    
                         if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), name, now);
                     break;
@@ -737,13 +753,13 @@ void app_main(void)
                         if (meas.data.state)
                         {
                             pot_set_tolerance(1);
-                            if (meas.gpio == 13) rotator_turn(STATE_CW);
-                            if (meas.gpio == 12) rotator_turn(STATE_CCW);
+                            if (meas.gpio == CWBUTTON_GPIO) rotator_turn(STATE_CW);
+                            if (meas.gpio == CCWBUTTON_GPIO) rotator_turn(STATE_CCW);
                         }
                         else
                         {
                             rotator_turn(STATE_STILL);
-                            pot_set_tolerance(4);
+                            stoppedTs = now;
                         }
                         stateread_done(&meas);
                     break;
@@ -762,7 +778,6 @@ void app_main(void)
             }
             else
             {   // timeout
-                ESP_LOGI(TAG,"timeout");
             }
         }
     }
