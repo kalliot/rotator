@@ -1,13 +1,19 @@
 #ifndef __TURN_ROTATOR__
 #define __TURN_ROTATOR__
 
+struct rotatorSettings
+{
+    int inertiaMs;
+    int inertiaDegr;
+    int beamWidth;
+};
 
+extern void rotator_setsettings(struct rotatorSettings *newsetup);
 extern bool rotator_turn2target(int target);
 extern bool rotator_turn(enum directionStates direction);
 extern bool rotator_turn_bystr(char *dirStr);
 extern bool rotator_turned(int azim);
 extern void rotator_publish_state(char *prefix, struct measurement *data, esp_mqtt_client_handle_t client);
-extern void rotator_set_inertia(int ms, int degr);
 extern void rotator_init(uint8_t *chip);
 
 

@@ -193,18 +193,12 @@ esp_err_t oled_clear(void) {
 void oled_i2c_scan(void) {
 
     esp_err_t ret = i2c_master_probe(s_bus, 0x3C, pdMS_TO_TICKS(100));
-if (ret == ESP_OK) {
-    ESP_LOGI(TAG, "OLED found at 0x3C");
-} else {
-    ESP_LOGE(TAG, "OLED NOT found (err=0x%x)", ret);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "OLED found at 0x3C");
+    } else {
+        ESP_LOGE(TAG, "OLED NOT found (err=0x%x)", ret);
+    }
 }
-}
-
-
-
-
-
-
 
 
 

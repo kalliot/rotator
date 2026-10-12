@@ -104,6 +104,8 @@ struct directionNames
     {"-",        0},
 };
 
+
+
 // globals
 
 struct netinfo *comminfo;
@@ -122,25 +124,25 @@ static int retry_num = 0;
 static char *program_version = "";
 static char appname[20];
 nvs_handle setup_flash;
-static int correction = 60; // pot zero is 60 degrees in antenna.
+static int hardStop = 60; // pot zero is 60 degrees in antenna.
 
 static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid);
 static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid);
 
 static int correct2pot(int request)
 {
-    if (request < correction)
-        return request - correction +360;
+    if (request < hardStop)
+        return request - hardStop +360;
     else
-        return request - correction;
+        return request - hardStop;
 }
 
 static int correct2disp(int implementation)
 {
-    if (implementation + correction > 360)
-        return implementation + correction - 360;
+    if (implementation + hardStop > 360)
+        return implementation + hardStop - 360;
     else
-        return implementation + correction;
+        return implementation + hardStop;
 }
 
 static char *getJsonStr(cJSON *js, char *name)
@@ -188,6 +190,14 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
+void display_connections(void)
+{
+    display_printf(commstatus, "%s %s %s",  (healthyflags & HEALTHYFLAGS_WIFI) ? "WIFI " : "     ",
+                                            (healthyflags & HEALTHYFLAGS_NTP)  ? "NTP  " : "     ",
+                                            (healthyflags & HEALTHYFLAGS_MQTT) ? "MQTT" : "    ");
+}
+
+
 static char *find_namedByAzimuth(int azimuth)
 {
     int diff;
@@ -203,7 +213,7 @@ static char *find_namedByAzimuth(int azimuth)
             closestIndex = i;
         }
     }
-    if (closest < 5)
+    if (closest < 5) // TODO: this should be beamwidth / 2
     {
         return interestingDirections[closestIndex].name;
     }
@@ -306,11 +316,11 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             {
                 if (target < 0 || target > 360)
                 {
-                    display_printf("invalid degrees requested %d", target); // do nothing.
+                    display_printf(information, "inv degr %d", target); // do nothing.
                 }
                 else
                 {
-                    display_printf("got target %d", target);
+                    display_printf(information,"got target %d", target);
                     if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
                 }
             }
@@ -324,7 +334,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             target = find_namedByName(name);
             if (target != -1)
             {
-                display_printf("turn to %s", name);
+                display_printf(information,"turn %12s", name);
                 {
                     if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
                 }
@@ -332,6 +342,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             else
             {
                 ESP_LOGI(TAG,"target %s is unknown", name);
+                display_printf(information,"unknown targ %s", name);
             }
         }
 
@@ -347,6 +358,17 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 pot_set_tolerance(4);
             }
         }
+        if (!strcmp(id,"settings"))
+        {
+            struct rotatorSettings rotSetup;
+
+            getJsonInt(root,"hardstop", &hardStop);
+            getJsonInt(root,"inertiams", &rotSetup.inertiaMs);
+            getJsonInt(root,"inertiadegr", &rotSetup.inertiaDegr);
+            getJsonInt(root,"beamwidth", &rotSetup.beamWidth);
+            rotator_setsettings(&rotSetup);
+        }
+
         cJSON_Delete(root);
     }
     return ret;
@@ -382,7 +404,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "sent subscribe %s successful, msg_id=%d", otaUpdateTopic, msg_id);
 
 
-        display_printf("mqtt connected");
         device_sendstatus(client, comminfo->mqtt_prefix, appname, (uint8_t *) handler_args);
         isConnected = true;
         statistics_getptr()->connectcnt++;
@@ -397,13 +418,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         sendAzimuth(client, (uint8_t *) handler_args, corrected, name, now);
 
         healthyflags |= HEALTHYFLAGS_MQTT;
+        display_connections();
         break;
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         statistics_getptr()->disconnectcnt++;
         isConnected = false;
-        display_printf("mqtt disconnected");
+        display_connections();
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -453,6 +475,7 @@ static void sntp_callback(struct timeval *tv)
     {
         firstSyncDone = true;
         healthyflags |= HEALTHYFLAGS_NTP;
+        display_connections();
     }
 }
 
@@ -521,30 +544,37 @@ static esp_mqtt_client_handle_t mqtt_app_start(uint8_t *chipid)
 
 static void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id,void *event_data)
 {
-    if(event_id == WIFI_EVENT_STA_START)
+    switch (event_id)
     {
-        ESP_LOGI(TAG,"WIFI CONNECTING");
-    }
-    else if (event_id == WIFI_EVENT_STA_CONNECTED)
-    {
-        ESP_LOGI(TAG,"WiFi CONNECTED");
-    }
-    else if (event_id == WIFI_EVENT_STA_DISCONNECTED)
-    {
-        ESP_LOGI(TAG,"WiFi lost connection");
-        display_printf("wlan disconnected");
-        if(retry_num < WIFI_RECONNECT_RETRYCNT){
-            esp_wifi_connect();
-            retry_num++;
-            ESP_LOGI(TAG,"Retrying to Connect");
-        }
-    }
-    else if (event_id == IP_EVENT_STA_GOT_IP)
-    {
-        ESP_LOGI(TAG,"Wifi got IP\n");
-        display_printf("wlan connected");
-        retry_num = 0;
-        healthyflags |= HEALTHYFLAGS_WIFI;
+        case WIFI_EVENT_STA_START:
+            ESP_LOGI(TAG,"WIFI CONNECTING");
+        break;
+
+        case WIFI_EVENT_STA_CONNECTED:
+            ESP_LOGI(TAG,"WiFi CONNECTED");
+            display_connections();
+        break;
+
+        case WIFI_EVENT_STA_DISCONNECTED:
+            ESP_LOGI(TAG,"WiFi lost connection");
+            if(retry_num < WIFI_RECONNECT_RETRYCNT){
+                esp_wifi_connect();
+                retry_num++;
+                ESP_LOGI(TAG,"Retrying to Connect");
+
+            }
+            display_connections();
+        break;
+
+        case IP_EVENT_STA_GOT_IP:
+            ESP_LOGI(TAG,"Wifi got IP\n");
+            retry_num = 0;
+            healthyflags |= HEALTHYFLAGS_WIFI;
+            display_connections();
+        break;
+
+        default:
+            break;
     }
 }
 
@@ -637,9 +667,10 @@ void app_main(void)
     comminfo = get_networkinfo();
     if (comminfo == NULL)
     {
-        display_printf("Setup:");
-        display_printf("check: %s","192.168.4.1");
-        display_printf("%s/%s", ESP_WIFI_SSID, ESP_WIFI_PASS);
+        display_text("Setup:");
+        display_text("check: 192.168.4.1");
+        display_text(ESP_WIFI_SSID);
+        display_text(ESP_WIFI_PASS);
         server_init();
     }
     else
@@ -687,7 +718,7 @@ void app_main(void)
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
         }    
 
-        display_printf("%s started", appname);
+        display_printf(information,"%s started", appname);
         int azimuth = pot_get_azimuth();
         rotator_init(chipid);
         stateread_start(0, CCWBUTTON_GPIO);
@@ -725,6 +756,7 @@ void app_main(void)
                 stoppedTs = 0;
                 pot_send_azimuth();
                 pot_set_tolerance(4);
+                display_printf(information, NULL);
             }
             if(xQueueReceive(evt_queue, &meas, 5 * 1000 / portTICK_PERIOD_MS))
             {
@@ -740,7 +772,7 @@ void app_main(void)
                         azimuth = meas.data.azimuth;
                         int corrected = correct2disp(azimuth);
                         char *name = find_namedByAzimuth(corrected);
-                        display_printf("azim = %d %s", corrected ,name);
+                        display_printf(dir_azimuth,"%03d %12s", corrected ,name);
                         if (!rotator_turned(azimuth))
                         {
                             stoppedTs = now;

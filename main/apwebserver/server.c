@@ -232,7 +232,6 @@ static void disconnect_handler(void* arg, esp_event_base_t event_base, int32_t e
     if (*server) {
         ESP_LOGI(TAG, "Stopping webserver");
         stop_webserver(*server);
-        display_printf("wlan disconnected");
         *server = NULL;
     }
 }
@@ -243,7 +242,6 @@ static void connect_handler(void* arg, esp_event_base_t event_base, int32_t even
     httpd_handle_t* server = (httpd_handle_t*) arg;
     if (*server == NULL) {
         ESP_LOGI(TAG, "Starting webserver");
-        display_printf("webserver started");
         *server = start_webserver();
     }
 }
@@ -255,12 +253,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        display_printf("client connected");
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
-        display_printf("client disconnected");
     }
 }
 

@@ -6,7 +6,8 @@
 #include "homeapp.h"
 #include "potreader.h"
 #include "statistics/statistics.h"
-
+#include "display.h"
+#include "rotator.h"
 
 
 static int targetAzim = -1;
@@ -16,21 +17,19 @@ static bool turningCCW = false;
 static bool initDone = false;
 static char stateTopic[64];
 static uint8_t *chipid;
-static int inertiaMs = 2000;
-static int inertiaDegr = 1;
-static int beamWidth = 10;
 static esp_timer_handle_t start_cw;
 static esp_timer_handle_t start_ccw;
 static const char *TAG = "ROT_ROTATOR";
 
 
-static void queue_state(enum directionStates state)
+struct rotatorSettings setup =
 {
-    struct measurement meas;
-    meas.id = ROTATORSTATE;
-    meas.data.rotatorstate = state;
-    xQueueSend(evt_queue, &meas, 0);
-}
+    .inertiaMs = 2000,
+    .inertiaDegr = 1,
+    .beamWidth = 10
+};
+
+
 
 enum machine_states
 {
@@ -49,6 +48,14 @@ struct stateRec
     { STATE_CCW, "ccw"},
     { STATE_NONE, "none"}
 };    
+
+static void queue_state(enum directionStates state)
+{
+    struct measurement meas;
+    meas.id = ROTATORSTATE;
+    meas.data.rotatorstate = state;
+    xQueueSend(evt_queue, &meas, 0);
+}
 
 static char *stateStr(enum directionStates state)
 {
@@ -95,6 +102,23 @@ void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_cli
     statistics_getptr()->sendcnt++;
 }
 
+void rotator_setsettings(struct rotatorSettings *newsetup)
+{
+    // TODO: store new values to flash:
+    if (newsetup->inertiaDegr != setup.inertiaDegr )
+    {
+        setup.inertiaDegr = newsetup->inertiaDegr;
+    }
+    if (newsetup->inertiaMs != setup.inertiaMs )
+    {
+        setup.inertiaMs = newsetup->inertiaMs;
+    }
+    if (newsetup->beamWidth != setup.beamWidth )
+    {
+        setup.beamWidth = newsetup->beamWidth;
+    }
+}
+
 
 static void start_turning(enum directionStates direction)
 {
@@ -103,11 +127,13 @@ static void start_turning(enum directionStates direction)
         case STATE_CW:
             gpio_set_level(CWRELAY_GPIO, true);
             turningCW = true;
+            display_turn(STATE_CW);
         break;
 
         case STATE_CCW:
             gpio_set_level(CCWRELAY_GPIO, true);
             turningCCW = true;
+            display_turn(STATE_CCW);
         break;
 
         default:
@@ -123,21 +149,13 @@ static void start_timered_turn_callback(void *arg)
     start_turning(*direction);
 }
 
-/*
-static void send_timered_position_callback(void *arg)
-{
-    ESP_LOGI(TAG,"timered azimuth is being sent");
-    currAzim = pot_get_azimuth();
-    pot_send_azimuth();
-    return;
-}
-*/
 
 static void stop_turning(void)
 {
     gpio_set_level(CCWRELAY_GPIO, false);
     gpio_set_level(CWRELAY_GPIO, false);
     queue_state(STATE_STILL);
+    display_turn(STATE_STILL);
     turningCCW = false;
     turningCW = false;
 }
@@ -154,9 +172,13 @@ bool rotator_turn(enum directionStates direction)
         case STATE_CCW:
             if (turningCW)
             {   stop_turning();
-                ESP_ERROR_CHECK(esp_timer_start_once(start_ccw, inertiaMs * 1000));
+                ESP_ERROR_CHECK(esp_timer_start_once(start_ccw, setup.inertiaMs * 1000));
             }
-            else start_turning(STATE_CCW);
+            else 
+            {
+                start_turning(STATE_CCW);
+                display_turn(direction);
+            }
             stateMachine = SM_BUTTON;
             ret = true;
         break;
@@ -165,9 +187,12 @@ bool rotator_turn(enum directionStates direction)
             if (turningCCW)
             {
                 stop_turning();
-                ESP_ERROR_CHECK(esp_timer_start_once(start_cw, inertiaMs * 1000));
+                ESP_ERROR_CHECK(esp_timer_start_once(start_cw, setup.inertiaMs * 1000));
             }
-            else start_turning(STATE_CW);
+            else {
+                start_turning(STATE_CW);
+                display_turn(direction);
+            }
             stateMachine = SM_BUTTON;
             ret = true;
         break;
@@ -176,7 +201,7 @@ bool rotator_turn(enum directionStates direction)
             esp_timer_stop(start_ccw);
             esp_timer_stop(start_cw);
             stop_turning();
-            vTaskDelay(inertiaMs / portTICK_PERIOD_MS);
+            vTaskDelay(setup.inertiaMs / portTICK_PERIOD_MS);
         break;
 
         case STATE_NONE:
@@ -196,19 +221,19 @@ bool rotator_turn2target(int target)
     bool ret = false;
     if (target == -1) return ret;
 
-    int tolerance = beamWidth / 2;
+    int tolerance = setup.beamWidth / 2;
     ESP_LOGI(TAG,"received turn to %d command", target);
     // we are close to cw end and target is close to ccw end,
     // then turn to closest end.
     // example1: currentAzim = 357 and target = 3 --> dont turn a long turn, instead turn to cw endpoint ie 360.
-    if (((360 - currAzim) < 90) && (target < (beamWidth / 2)))
+    if (((360 - currAzim) < 90) && (target < tolerance))
     {
         ESP_LOGI(TAG,"optimising long ccw rotation to short cw rotation");
         targetAzim = 360;
         tolerance = 0; // beamwidht is already in use
     }
     // example2: currentAzim = 3 and target = 357 --> dont turn a long turn, instead turn to ccw endpoint ie 0.
-    else if (((360 - currAzim) > (360 - 90)) && target > (360 - beamWidth / 2))
+    else if (((360 - currAzim) > (360 - 90)) && target > (360 - tolerance))
     {
         ESP_LOGI(TAG,"optimising long cw rotation to short ccw rotation");
         targetAzim = 0;
@@ -221,7 +246,7 @@ bool rotator_turn2target(int target)
     {
         if (turningCCW)
         {   stop_turning();
-            ESP_ERROR_CHECK(esp_timer_start_once(start_cw,  inertiaMs * 1000));
+            ESP_ERROR_CHECK(esp_timer_start_once(start_cw,  setup.inertiaMs * 1000));
         }
         else start_turning(STATE_CW);
         stateMachine = SM_TARGET;
@@ -232,19 +257,13 @@ bool rotator_turn2target(int target)
         if (turningCW)
         {
             stop_turning();
-            ESP_ERROR_CHECK(esp_timer_start_once(start_ccw,  inertiaMs * 1000));
+            ESP_ERROR_CHECK(esp_timer_start_once(start_ccw,  setup.inertiaMs * 1000));
         }
         else start_turning(STATE_CCW);
         stateMachine = SM_TARGET;
         ret = true;
     }
     return ret;
-}
-
-void rotator_set_inertia(int ms, int degr)
-{
-    inertiaMs = ms;
-    inertiaDegr = degr;
 }
 
 
@@ -254,13 +273,13 @@ bool rotator_turned(int azim)
 
     if (stateMachine == SM_TARGET)
     {
-        if (turningCW && ((azim - inertiaDegr) >= targetAzim))
+        if (turningCW && (azim >= (targetAzim - setup.inertiaDegr)))
         {
             stop_turning();
             ESP_LOGI(TAG,"ended turn cw to target %d, azim=%d", targetAzim, azim);
             ret = false;
         }
-        if (turningCCW && ((azim + inertiaDegr) <= targetAzim))
+        if (turningCCW && (azim <= (targetAzim + setup.inertiaDegr)))
         {
             stop_turning();
             ESP_LOGI(TAG,"ended turn ccw to target %d, azim=%d", targetAzim, azim);
