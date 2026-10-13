@@ -98,11 +98,26 @@ struct directionNames
     {"Inkoo",    200},
     {"Vantaa",   195},
     {"Tallinna", 190},
-    {"Tukholma", 255},
-    {"Pori",     285},
-    {"Aurora",   0},
     {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0},
+    {"-",        0}
 };
+
+
+#define MAX_DIRECTIONS (sizeof(interestingDirections) / sizeof(struct directionNames))
 
 
 
@@ -198,34 +213,10 @@ void display_connections(void)
 }
 
 
-static char *find_namedByAzimuth(int azimuth)
-{
-    int diff;
-    int closest = 360;
-    int closestIndex = -1;
-
-    for (int i=0; i < 7;i++)
-    {
-        diff = abs(interestingDirections[i].azimuth - azimuth);
-        if (diff < closest)
-        {
-            closest = diff;
-            closestIndex = i;
-        }
-    }
-    if (closest < 5) // TODO: this should be beamwidth / 2
-    {
-        return interestingDirections[closestIndex].name;
-    }
-    return "-";
-}
-
-
 static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, time_t now)
 {
     char targetTopic[60];
     int retain=1;
-    
     static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/parameters/azimuth", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
@@ -246,15 +237,120 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
     return true;
 }
 
-
-static int find_namedByName(char *name)
+static char *find_namedByAzimuth(int azimuth)
 {
-    for (int i=0; i < 7;i++)
+    int diff;
+    int closest = 360;
+    int closestIndex = -1;
+
+    for (int i=0; i < MAX_DIRECTIONS ;i++)
+    {
+        diff = abs(interestingDirections[i].azimuth - azimuth);
+        if (diff < closest)
+        {
+            closest = diff;
+            closestIndex = i;
+        }
+    }
+    if (closest < 5) // TODO: this should be beamwidth / 2
+    {
+        return interestingDirections[closestIndex].name;
+    }
+    return "-";
+}
+
+
+static struct directionNames *find_byExactAzim(int azimuth)
+{
+    for (int i=0; i < MAX_DIRECTIONS;i++)
+    {
+        if (interestingDirections[i].azimuth == azimuth)
+            return &interestingDirections[i];
+    }
+    return NULL;
+}
+
+
+static struct directionNames *find_namedByName(char *name)
+{
+    for (int i=0; i < MAX_DIRECTIONS;i++)
     {
         if (!strcmp(interestingDirections[i].name, name))
-            return interestingDirections[i].azimuth;
+            return &interestingDirections[i];
     }
-    return -1;
+    return NULL;
+}
+
+struct directionNames *find_freeSlot(void)
+{
+    for (int i=0; i < MAX_DIRECTIONS; i++)
+    {
+        if (interestingDirections[i].name[0] == '-')
+            return &interestingDirections[i];
+    }
+    return NULL;
+}
+static bool update_direction_table(char *name, int azimuth)
+{
+    struct directionNames *rec;
+
+    // is it found by azimuth?
+    // if so, and name differs, update the name
+    rec = find_byExactAzim(azimuth);
+    if (rec != NULL)
+    {
+        ESP_LOGI(TAG,"found by azimuth");
+        if (strcmp(rec->name, name))
+        {
+            ESP_LOGI(TAG,"updated name of azim %d to %s", azimuth, name);
+            display_printf(information,"%s->%s", rec->name, name);
+            strcpy(rec->name, name);
+            return true;
+        }
+        else
+        {
+            ESP_LOGI(TAG,"Name is same, no update");
+            return false;
+        }
+    }
+    else
+    {
+        // otherwise, is it found by name
+        // if so and azimuth differs, update azimuth
+        rec = find_namedByName(name);
+        if (rec != NULL)
+        {
+            ESP_LOGI(TAG,"found by name");
+            if (rec->azimuth != azimuth)
+            {
+                ESP_LOGI(TAG,"updated %s azimuth from %d to %d", name, rec->azimuth, azimuth);
+                display_printf(information,"%s:%d->%d", name, rec->azimuth, azimuth);
+                rec->azimuth = azimuth;
+                return true;
+            }
+            else
+            {
+                ESP_LOGI(TAG,"azimuth not changed");
+                return false;
+            }
+        }
+    }
+        // find a free slot.
+    rec = find_freeSlot();
+    if (rec != NULL)
+    {
+        ESP_LOGI(TAG,"Inserting %s azimuth %d", name, azimuth);
+        display_printf(information,"Adding %s", name);
+        strcpy(rec->name, name);
+        rec->azimuth = azimuth;
+        return true;
+    }
+    else
+    {
+        ESP_LOGI(TAG,"directions table is full");
+        display_printf(information,"Table is full");
+    }
+    return false;
 }
 
 
@@ -272,10 +368,10 @@ static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid)
         now = 0;
     }
     sprintf(topic,"%s/%s/%x%x%x/setup/names", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"ts\":%jd,\"names\":[";
-    sprintf(jsondata, datafmt, chipid[3], chipid[4], chipid[5], now);
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"maxnames\":%d,\"ts\":%jd,\"names\":[";
+    sprintf(jsondata, datafmt, chipid[3], chipid[4], chipid[5], MAX_DIRECTIONS, now);
     strcat(jsondata,"[");
-    for (int i=0; i < 7;i++)
+    for (int i=0; i < MAX_DIRECTIONS;i++)
     {
         if (interestingDirections[i].name[0] != '-')
         {
@@ -328,15 +424,15 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         if (!strcmp(id,"namedtarget"))
         {
             char name[20];
-            int target;
+            struct directionNames *target;
 
             strcpy(name, getJsonStr(root,"name"));
             target = find_namedByName(name);
-            if (target != -1)
+            if (target != NULL)
             {
                 display_printf(information,"turn %12s", name);
                 {
-                    if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
+                    if (rotator_turn2target(correct2pot(target->azimuth))) pot_set_tolerance(1);
                 }
             }
             else
@@ -346,7 +442,9 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             }
         }
 
-        // { "id":"turn","direction":"CW"}
+        // { "id":"turn","direction":"ccw"}
+        // { "id":"turn","direction":"cw"}
+        // { "id":"turn","direction":"still"}
         if (!strcmp(id,"turn"))
         {
             if (rotator_turn_bystr(getJsonStr(root,"direction")))
@@ -358,6 +456,19 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 pot_set_tolerance(4);
             }
         }
+        if (!strcmp(id,"updatenames"))
+        {
+            char name[13];
+            int azimuth;
+
+            strcpy(name,getJsonStr(root,"name"));
+            getJsonInt(root,"azimuth", &azimuth);
+            if (update_direction_table(name, azimuth))
+            {
+                sendSetup(event->client, chipid);
+            }
+        }
+
         if (!strcmp(id,"settings"))
         {
             struct rotatorSettings rotSetup;
@@ -712,7 +823,7 @@ void app_main(void)
 
         while (1)
         {
-            if (pot_init(chipid, adc_handle, 500, 7))
+            if (pot_init(chipid, adc_handle, 500, MAX_DIRECTIONS))
                 break;
             else
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
