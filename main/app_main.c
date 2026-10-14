@@ -47,6 +47,7 @@
 #include "factoryreset.h"
 #include "display.h"
 #include "potreader.h"
+#include "azimdb.h"
 #include "rotator.h"
 #include "statereader.h"
 #include "statistics/statistics.h"
@@ -88,36 +89,9 @@ struct netinfo {
     char *mqtt_prefix;
 };
 
-struct directionNames
-{
-    char name[12];
-    int azimuth;
-} interestingDirections[] =
-{
-    {"Lahti",    280},
-    {"Inkoo",    200},
-    {"Vantaa",   195},
-    {"Tallinna", 190},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0},
-    {"-",        0}
-};
 
 
-#define MAX_DIRECTIONS (sizeof(interestingDirections) / sizeof(struct directionNames))
+
 
 
 
@@ -141,7 +115,6 @@ static char appname[20];
 nvs_handle setup_flash;
 static int hardStop = 60; // pot zero is 60 degrees in antenna.
 
-static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid);
 static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid);
 
 static int correct2pot(int request)
@@ -237,152 +210,6 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
     return true;
 }
 
-static char *find_namedByAzimuth(int azimuth)
-{
-    int diff;
-    int closest = 360;
-    int closestIndex = -1;
-
-    for (int i=0; i < MAX_DIRECTIONS ;i++)
-    {
-        diff = abs(interestingDirections[i].azimuth - azimuth);
-        if (diff < closest)
-        {
-            closest = diff;
-            closestIndex = i;
-        }
-    }
-    if (closest < 5) // TODO: this should be beamwidth / 2
-    {
-        return interestingDirections[closestIndex].name;
-    }
-    return "-";
-}
-
-
-static struct directionNames *find_byExactAzim(int azimuth)
-{
-    for (int i=0; i < MAX_DIRECTIONS;i++)
-    {
-        if (interestingDirections[i].azimuth == azimuth)
-            return &interestingDirections[i];
-    }
-    return NULL;
-}
-
-
-static struct directionNames *find_namedByName(char *name)
-{
-    for (int i=0; i < MAX_DIRECTIONS;i++)
-    {
-        if (!strcmp(interestingDirections[i].name, name))
-            return &interestingDirections[i];
-    }
-    return NULL;
-}
-
-struct directionNames *find_freeSlot(void)
-{
-    for (int i=0; i < MAX_DIRECTIONS; i++)
-    {
-        if (interestingDirections[i].name[0] == '-')
-            return &interestingDirections[i];
-    }
-    return NULL;
-}
-static bool update_direction_table(char *name, int azimuth)
-{
-    struct directionNames *rec;
-
-    // is it found by azimuth?
-    // if so, and name differs, update the name
-    rec = find_byExactAzim(azimuth);
-    if (rec != NULL)
-    {
-        ESP_LOGI(TAG,"found by azimuth");
-        if (strcmp(rec->name, name))
-        {
-            ESP_LOGI(TAG,"updated name of azim %d to %s", azimuth, name);
-            display_printf(information,"%s->%s", rec->name, name);
-            strcpy(rec->name, name);
-            return true;
-        }
-        else
-        {
-            ESP_LOGI(TAG,"Name is same, no update");
-            return false;
-        }
-    }
-    else
-    {
-        // otherwise, is it found by name
-        // if so and azimuth differs, update azimuth
-        rec = find_namedByName(name);
-        if (rec != NULL)
-        {
-            ESP_LOGI(TAG,"found by name");
-            if (rec->azimuth != azimuth)
-            {
-                ESP_LOGI(TAG,"updated %s azimuth from %d to %d", name, rec->azimuth, azimuth);
-                display_printf(information,"%s:%d->%d", name, rec->azimuth, azimuth);
-                rec->azimuth = azimuth;
-                return true;
-            }
-            else
-            {
-                ESP_LOGI(TAG,"azimuth not changed");
-                return false;
-            }
-        }
-    }
-        // find a free slot.
-    rec = find_freeSlot();
-    if (rec != NULL)
-    {
-        ESP_LOGI(TAG,"Inserting %s azimuth %d", name, azimuth);
-        display_printf(information,"Adding %s", name);
-        strcpy(rec->name, name);
-        rec->azimuth = azimuth;
-        return true;
-    }
-    else
-    {
-        ESP_LOGI(TAG,"directions table is full");
-        display_printf(information,"Table is full");
-    }
-    return false;
-}
-
-
-static void sendSetup(esp_mqtt_client_handle_t client, uint8_t *chipid)
-{
-    char topic[60];
-    int retain=1;
-    time_t now;
-
-    time(&now);
-
-    if (now < MIN_EPOCH)
-    {
-        retain = 0;
-        now = 0;
-    }
-    sprintf(topic,"%s/%s/%x%x%x/setup/names", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"maxnames\":%d,\"ts\":%jd,\"names\":[";
-    sprintf(jsondata, datafmt, chipid[3], chipid[4], chipid[5], MAX_DIRECTIONS, now);
-    strcat(jsondata,"[");
-    for (int i=0; i < MAX_DIRECTIONS;i++)
-    {
-        if (interestingDirections[i].name[0] != '-')
-        {
-            sprintf(&jsondata[strlen(jsondata)],"{\"name\":\"%s\",\"azimuth\":%d},", interestingDirections[i].name, interestingDirections[i].azimuth);
-        }
-    }
-    jsondata[strlen(jsondata)-1]=0;
-    strcat(jsondata,"]}");
-    esp_mqtt_client_publish(client, topic, jsondata , 0, 0, retain);
-}
-
 
 static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
 {
@@ -405,7 +232,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             }
         }
         // { "id":"newtarget","degr":90}
-        if (!strcmp(id,"newtarget"))
+        else if (!strcmp(id,"newtarget"))
         {
             int target = -1;
             if (getJsonInt(root,"degr",&target))
@@ -421,13 +248,13 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 }
             }
         }
-        if (!strcmp(id,"namedtarget"))
+        else if (!strcmp(id,"namedtarget"))
         {
             char name[20];
-            struct directionNames *target;
+            struct directionNames *target = NULL;
 
             strcpy(name, getJsonStr(root,"name"));
-            target = find_namedByName(name);
+            target = azimdb_find_named(name);
             if (target != NULL)
             {
                 display_printf(information,"turn %12s", name);
@@ -441,11 +268,28 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 display_printf(information,"unknown targ %s", name);
             }
         }
+        else if (!strcmp(id,"delname"))
+        {
+            char name[13];
+            strcpy(name,getJsonStr(root,"name"));
+            if (azimdb_delname(name)) ret = true;
+        }
+        else if (!strcmp(id,"updatenames"))
+        {
+            char name[13];
+            int azimuth;
+
+            strcpy(name,getJsonStr(root,"name"));
+            getJsonInt(root,"azimuth", &azimuth);
+
+            ESP_LOGI(TAG, "----> UPDATING AZIMDB");
+            if (azimdb_update(name, azimuth)) ret = true;
+        }
 
         // { "id":"turn","direction":"ccw"}
         // { "id":"turn","direction":"cw"}
         // { "id":"turn","direction":"still"}
-        if (!strcmp(id,"turn"))
+        else if (!strcmp(id,"turn"))
         {
             if (rotator_turn_bystr(getJsonStr(root,"direction")))
             {
@@ -456,20 +300,8 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 pot_set_tolerance(4);
             }
         }
-        if (!strcmp(id,"updatenames"))
-        {
-            char name[13];
-            int azimuth;
 
-            strcpy(name,getJsonStr(root,"name"));
-            getJsonInt(root,"azimuth", &azimuth);
-            if (update_direction_table(name, azimuth))
-            {
-                sendSetup(event->client, chipid);
-            }
-        }
-
-        if (!strcmp(id,"settings"))
+        else if (!strcmp(id,"settings"))
         {
             struct rotatorSettings rotSetup;
 
@@ -479,7 +311,6 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             getJsonInt(root,"beamwidth", &rotSetup.beamWidth);
             rotator_setsettings(&rotSetup);
         }
-
         cJSON_Delete(root);
     }
     return ret;
@@ -519,13 +350,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         isConnected = true;
         statistics_getptr()->connectcnt++;
         sendInfo(client, (uint8_t *) handler_args);
-        sendSetup(client, (uint8_t *) handler_args);
+        azimdb_show();
+        //azimdb_publish(client, comminfo->mqtt_prefix, appname);
         int azimuth = pot_get_azimuth();
         time_t now;
 
         time(&now);
         int corrected = correct2disp(azimuth);
-        char *name = find_namedByAzimuth(corrected);
+        char *name = "-";
+        name = azimdb_find_nearest(corrected, 10);
         sendAzimuth(client, (uint8_t *) handler_args, corrected, name, now);
 
         healthyflags |= HEALTHYFLAGS_MQTT;
@@ -553,7 +386,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_DATA:
         if (handleJson(event,(uint8_t *) handler_args))
         {
-            sendSetup(client, (uint8_t *) handler_args);
+            azimdb_show();
+            //azimdb_publish(client, comminfo->mqtt_prefix, appname);
         }
         break;
 
@@ -787,6 +621,7 @@ void app_main(void)
     else
     {
         setup_flash = flash_open("storage");
+
         evt_queue = xQueueCreate(10, sizeof(struct measurement));
         gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
         factoryreset_init();
@@ -823,7 +658,7 @@ void app_main(void)
 
         while (1)
         {
-            if (pot_init(chipid, adc_handle, 500, MAX_DIRECTIONS))
+            if (pot_init(chipid, adc_handle, 500, 7))
                 break;
             else
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -834,6 +669,7 @@ void app_main(void)
         rotator_init(chipid);
         stateread_start(0, CCWBUTTON_GPIO);
         stateread_start(1, CWBUTTON_GPIO);
+        azimdb_init(chipid);
 
         while (1)
         {
@@ -882,7 +718,7 @@ void app_main(void)
                     case AZIMUTH:
                         azimuth = meas.data.azimuth;
                         int corrected = correct2disp(azimuth);
-                        char *name = find_namedByAzimuth(corrected);
+                        char *name= azimdb_find_nearest(corrected, 10);
                         display_printf(dir_azimuth,"%03d %12s", corrected ,name);
                         if (!rotator_turned(azimuth))
                         {
@@ -905,6 +741,10 @@ void app_main(void)
                             stoppedTs = now;
                         }
                         stateread_done(&meas);
+                    break;
+
+                    case ADB_REFRESHED:
+                        if (isConnected) azimdb_publish(client, comminfo->mqtt_prefix, appname, now);
                     break;
 
                     case ROTATORSTATE:

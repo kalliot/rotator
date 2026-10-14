@@ -42,6 +42,15 @@ void flash_erase_all(nvs_handle nvsh)
     if (err != ESP_OK) ESP_LOGD(TAG,"flash erase failed");
 }
 
+
+void flash_erase_one(nvs_handle nvsh, char *name)
+{
+    esp_err_t err;
+
+    err = nvs_erase_key(nvsh, name);
+    if (err != ESP_OK) ESP_LOGD(TAG,"flash erase key %s failed", name);
+}
+
 char *flash_read_str(nvs_handle nvsh, char *name, char *def, int len)
 {
     esp_err_t err;

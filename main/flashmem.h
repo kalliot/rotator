@@ -10,6 +10,7 @@ extern uint16_t flash_read(nvs_handle nvsh, char *name, uint16_t def);
 extern void flash_write(nvs_handle nvsh, char *name, uint16_t value);
 extern uint32_t flash_read32(nvs_handle nvsh, char *name, uint32_t def);
 extern void flash_write32(nvs_handle nvsh, char *name, uint32_t value);
+extern void flash_erase_one(nvs_handle nvsh, char *name);
 extern char *flash_read_str(nvs_handle nvsh, char *name, char *def, int len);
 extern void flash_write_str(nvs_handle nvsh, char *name, char *value);
 extern float flash_read_float(nvs_handle nvsh, char *name, float def);

@@ -13,6 +13,7 @@ enum meastype
 {
     AZIMUTH,
     ROTATORSTATE,
+    ADB_REFRESHED,
     REFRESHPOS,
     STATE,
     OTA

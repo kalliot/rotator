@@ -234,9 +234,9 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, int intervalM
     }
     samplecnt = cnt;
     calibr[CAL_MIN].raw      = flash_read(setup_flash, calibr[CAL_MIN].rawname,  calibr[CAL_MIN].raw);
-    calibr[CAL_MIN].azimuth  = flash_read_float(setup_flash, calibr[CAL_MIN].azimname, calibr[CAL_MIN].azimuth);
+    calibr[CAL_MIN].azimuth  = flash_read(setup_flash, calibr[CAL_MIN].azimname, calibr[CAL_MIN].azimuth);
     calibr[CAL_MAX].raw      = flash_read(setup_flash, calibr[CAL_MAX].rawname,  calibr[CAL_MAX].raw);
-    calibr[CAL_MAX].azimuth  = flash_read_float(setup_flash, calibr[CAL_MAX].azimname, calibr[CAL_MAX].azimuth);
+    calibr[CAL_MAX].azimuth  = flash_read(setup_flash, calibr[CAL_MAX].azimname, calibr[CAL_MAX].azimuth);
 
     chipid = chip;
     adc_oneshot_chan_cfg_t config = {
