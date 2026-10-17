@@ -130,23 +130,19 @@ static void read_all(void)
     char valuestr[12];
     char *nameptr;
     char *def = "-";
-    int slot = 0;
 
     for (int i=0; i < MAX_DIRECTIONS;i++)
     {
         sprintf(namestr, "azname%02d", i);
         sprintf(valuestr, "azvalue%02d", i);
         nameptr = flash_read_str(setup_flash, namestr,  "-", 12);
-        strcpy(interestingDirections[slot].name, nameptr);
+        strcpy(interestingDirections[i].name, nameptr);
         if (nameptr != def)
         {
-            // found
             free(nameptr);  // TODO: nameptr is a bit weird. rethink flash_ module.
-            interestingDirections[slot].azimuth = flash_read(setup_flash, valuestr, 0);
-            slot++;
+            interestingDirections[i].azimuth = flash_read(setup_flash, valuestr, 0);
         }
     }
-    ESP_LOGI(TAG,"%d records read", slot);
 }
 
 void azimdb_show(void)
@@ -273,9 +269,8 @@ void azimdb_publish(esp_mqtt_client_handle_t client, char *prefix, char *appname
         now = 0;
     }
     sprintf(topic,"%s/%s/%x%x%x/setup/names", prefix, appname, chipid[3], chipid[4], chipid[5]);
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"maxnames\":%d,\"ts\":%jd,\"names\":[";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"nametable\",\"maxnames\":%d,\"ts\":%jd,\"names\":[ ";
     sprintf(jsondata, datafmt, chipid[3], chipid[4], chipid[5], MAX_DIRECTIONS, now);
-    strcat(jsondata,"[");
     for (int i=0; i < MAX_DIRECTIONS;i++)
     {
         if (interestingDirections[i].name[0] != '-')

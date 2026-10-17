@@ -17,6 +17,7 @@ static bool turningCCW = false;
 static bool initDone = false;
 static char stateTopic[64];
 static uint8_t *chipid;
+static uint64_t stoppedTic = 0;
 static esp_timer_handle_t start_cw;
 static esp_timer_handle_t start_ccw;
 static const char *TAG = "ROT_ROTATOR";
@@ -80,7 +81,7 @@ static enum directionStates str2state(char *str)
 }
 
 
-void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_client_handle_t client)
+void rotator_publish_state(char * prefix, enum directionStates state, esp_mqtt_client_handle_t client)
 {
     time_t now;
     int retain = 1;
@@ -91,12 +92,12 @@ void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_cli
         now = 0;
         retain = 0;
     }
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestete\",\"state\":%s,\"ts\":%jd}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestate\",\"state\":\"%s\",\"ts\":%jd}";
     sprintf(stateTopic,"%s/rotator/%x%x%x/state", prefix, chipid[3], chipid[4], chipid[5]);
 
     sprintf(jsondata, datafmt,
                 chipid[3],chipid[4],chipid[5],
-                stateStr(data->data.rotatorstate),
+                stateStr(state),
                 now);
     esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
@@ -104,24 +105,54 @@ void rotator_publish_state(char * prefix, struct measurement *data, esp_mqtt_cli
 
 void rotator_setsettings(struct rotatorSettings *newsetup)
 {
-    // TODO: store new values to flash:
+    // TODO: store new values to flash
+    bool wrote = false;
     if (newsetup->inertiaDegr != setup.inertiaDegr )
     {
         setup.inertiaDegr = newsetup->inertiaDegr;
+        flash_write(setup_flash, "inertdegr", newsetup->inertiaDegr);
     }
     if (newsetup->inertiaMs != setup.inertiaMs )
     {
         setup.inertiaMs = newsetup->inertiaMs;
+        flash_write(setup_flash, "inertms", newsetup->inertiaMs);
     }
     if (newsetup->beamWidth != setup.beamWidth )
     {
         setup.beamWidth = newsetup->beamWidth;
+        flash_write(setup_flash, "beamwidth", newsetup->beamWidth);
     }
+    if (newsetup->hardStop != setup.hardStop )
+    {
+        setup.hardStop = newsetup->hardStop;
+        flash_write(setup_flash, "hardstop", newsetup->hardStop);
+    }
+    if (wrote) flash_commitchanges(setup_flash);
 }
 
+void read_settings(void)
+{
+    setup.inertiaDegr = flash_read32(setup_flash, "inertdegr",setup.inertiaDegr);
+    setup.inertiaMs = flash_read32(setup_flash, "inertdegr", setup.inertiaMs);
+    setup.beamWidth = flash_read32(setup_flash, "beamwidth", setup.beamWidth);
+    setup.hardStop = flash_read32(setup_flash, "hardstop", setup.hardStop);
+}
 
 static void start_turning(enum directionStates direction)
 {
+    uint64_t nowTic = esp_timer_get_time();
+
+    uint64_t sinceStopped;
+
+    if (stoppedTic != 0)
+    {
+        sinceStopped = (nowTic - stoppedTic) / 1000;
+        ESP_LOGI(TAG, "Tics gone since stop %llu", sinceStopped);
+        if (sinceStopped > 0 && (sinceStopped < setup.inertiaMs))
+        {
+            vTaskDelay(pdMS_TO_TICKS(setup.inertiaMs - sinceStopped));
+        }
+    }
     switch (direction)
     {
         case STATE_CW:
@@ -154,6 +185,8 @@ static void stop_turning(void)
 {
     gpio_set_level(CCWRELAY_GPIO, false);
     gpio_set_level(CWRELAY_GPIO, false);
+
+    stoppedTic = esp_timer_get_time();
     queue_state(STATE_STILL);
     display_turn(STATE_STILL);
     turningCCW = false;
@@ -201,7 +234,7 @@ bool rotator_turn(enum directionStates direction)
             esp_timer_stop(start_ccw);
             esp_timer_stop(start_cw);
             stop_turning();
-            vTaskDelay(setup.inertiaMs / portTICK_PERIOD_MS);
+            //vTaskDelay(setup.inertiaMs / portTICK_PERIOD_MS);
         break;
 
         case STATE_NONE:
@@ -316,6 +349,7 @@ void rotator_init(uint8_t *chip)
     };
 
     chipid = chip;
+    read_settings();
     currAzim = pot_get_azimuth();
     esp_timer_create(&start_cw_args, &start_cw);
     esp_timer_create(&start_ccw_args, &start_ccw);

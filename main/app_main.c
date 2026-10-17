@@ -305,7 +305,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         {
             struct rotatorSettings rotSetup;
 
-            getJsonInt(root,"hardstop", &hardStop);
+            getJsonInt(root,"hardstop", &rotSetup.hardStop);
             getJsonInt(root,"inertiams", &rotSetup.inertiaMs);
             getJsonInt(root,"inertiadegr", &rotSetup.inertiaDegr);
             getJsonInt(root,"beamwidth", &rotSetup.beamWidth);
@@ -748,7 +748,7 @@ void app_main(void)
                     break;
 
                     case ROTATORSTATE:
-                        if (isConnected) rotator_publish_state(comminfo->mqtt_prefix, &meas, client);
+                        if (isConnected) rotator_publish_state(comminfo->mqtt_prefix, meas.data.state, client);
                     break;
 
                     case OTA:
