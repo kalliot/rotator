@@ -6,10 +6,10 @@
 #include "esp_adc/adc_oneshot.h"
 
 
-extern void pot_set_calibr_low(int azim, int raw);
-extern void pot_set_calibr_high(int azim, int raw);
-extern int pot_get_calibr_low(int *temp);
-extern int pot_get_calibr_high(int *temp);
+extern void pot_set_calibr_low(void);
+extern void pot_set_calibr_high(void);
+extern int pot_get_calibr_low();
+extern int pot_get_calibr_high();
 extern float pot_get_azimuth(void);
 extern void pot_send_azimuth(void);
 extern void pot_set_tolerance(int tolerance);

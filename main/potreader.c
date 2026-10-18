@@ -25,7 +25,7 @@ static int prevAzim = 0;
 static int currTolerance = 3;
 static SemaphoreHandle_t mutex;
 
-static const char *TAG = "ntcreader";
+static const char *TAG = "potreader";
 static int errState = 0;
 
 enum {
@@ -33,25 +33,21 @@ enum {
     CAL_MAX
 };
 
-
 static struct {
     char *rawname;
-    char *azimname;
     int raw;
-    int azimuth;
 } calibr[] = {
-    { "cal.minraw","cal.minazim",149, 0},  // default values.
-    { "cal.maxraw","cal.maxazim",3800, 360}
+    { "cal.minraw",149,},  // default values.
+    { "cal.maxraw",3800}
 };
 
 
 static float convert(int raw)
 {
     float rdiff = calibr[CAL_MAX].raw - calibr[CAL_MIN].raw;   
-    float cdiff = calibr[CAL_MAX].azimuth - calibr[CAL_MIN].azimuth; 
     float d = raw - calibr[CAL_MIN].raw;                       
     float x = d / rdiff;                                       
-    return x * cdiff + calibr[CAL_MIN].azimuth;                   
+    return x * 360;
 }
 
 static int pot_read(void)
@@ -73,52 +69,37 @@ static void queue_measurement(int azimval, int err)
 }
 
 
-void pot_set_calibr_low(int azim, int raw)
+void pot_set_calibr_low(void)
 {
-    int azimuth = azim;
-    int rawvalue = raw;
-    
     if (xSemaphoreTake(mutex, (TickType_t) 1000) == pdTRUE)
     {
-        if (raw == -1) // get last measured value.
-        {
-            rawvalue  = lastRaw;
-        }
-        printf("got calibration low, raw=%d, measured azimuth is %d\n", rawvalue, azim);
+        int rawvalue  = lastRaw;
+        ESP_LOGI(TAG,"changing calibration low %d -> %d\n", calibr[CAL_MIN].raw, rawvalue);
         calibr[CAL_MIN].raw  = rawvalue;
-        calibr[CAL_MIN].azimuth = azimuth;
         xSemaphoreGive(mutex);
     }
 }
 
 
-void pot_set_calibr_high(int azim, int raw)
+void pot_set_calibr_high(void)
 {
-    int azimuth = azim;
-    int rawvalue = raw;
     
     if (xSemaphoreTake(mutex, (TickType_t) 1000) == pdTRUE)
     {
-        if (raw == -1) // get last measured value.
-        {
-            rawvalue  = lastRaw;
-        }
-        ESP_LOGI(TAG,"got calibration high, raw=%d, measured azimuth is %d", rawvalue, azim);
+        int rawvalue  = lastRaw;
+        ESP_LOGI(TAG,"changing calibration high %d -> %d\n", calibr[CAL_MAX].raw, rawvalue);
         calibr[CAL_MAX].raw  = rawvalue;
-        calibr[CAL_MAX].azimuth = azimuth;
         xSemaphoreGive(mutex);
     }
 }
 
-int pot_get_calibr_low(int *azim)
+int pot_get_calibr_low(void)
 {
-    *azim = calibr[CAL_MIN].azimuth;
     return calibr[CAL_MIN].raw;
 }
 
-int pot_get_calibr_high(int *azim)
+int pot_get_calibr_high(void)
 {
-    *azim = calibr[CAL_MAX].azimuth;
     return calibr[CAL_MAX].raw;
 }
 
@@ -135,15 +116,8 @@ bool pot_save_calibrations(void)
         ESP_LOGE(TAG,"Error: calibration maxraw is lower than minraw");
         return false;
     }
-    if (calibr[CAL_MAX].azimuth  < calibr[CAL_MIN].azimuth)
-    {
-        ESP_LOGI(TAG,"Error: calibration maxazimuth is lower than minazimuth");
-        return false;
-    }
     flash_write(setup_flash, calibr[CAL_MAX].rawname, calibr[CAL_MAX].raw);
     flash_write(setup_flash, calibr[CAL_MIN].rawname, calibr[CAL_MIN].raw);
-    flash_write(setup_flash, calibr[CAL_MAX].azimname, calibr[CAL_MAX].azimuth);
-    flash_write(setup_flash, calibr[CAL_MIN].azimname, calibr[CAL_MIN].azimuth);
     flash_commitchanges(setup_flash);
     queue_measurement(convert(pot_read()),0);
     return true;
@@ -234,9 +208,7 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, int intervalM
     }
     samplecnt = cnt;
     calibr[CAL_MIN].raw      = flash_read(setup_flash, calibr[CAL_MIN].rawname,  calibr[CAL_MIN].raw);
-    calibr[CAL_MIN].azimuth  = flash_read(setup_flash, calibr[CAL_MIN].azimname, calibr[CAL_MIN].azimuth);
     calibr[CAL_MAX].raw      = flash_read(setup_flash, calibr[CAL_MAX].rawname,  calibr[CAL_MAX].raw);
-    calibr[CAL_MAX].azimuth  = flash_read(setup_flash, calibr[CAL_MAX].azimname, calibr[CAL_MAX].azimuth);
 
     chipid = chip;
     adc_oneshot_chan_cfg_t config = {
@@ -249,7 +221,7 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, int intervalM
     azimuth = convert(pot_read());
     ESP_LOGI(TAG,"pot_init, first azimuth read is %f", azimuth);
     sampleInterval = intervalMs / samplecnt;
-    xTaskCreate(pot_reader, "ntc reader", 2048, NULL, 10, NULL);
+    xTaskCreate(pot_reader, "pot_reader", 2048, NULL, 10, NULL);
     return true;
 }
 

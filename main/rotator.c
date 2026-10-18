@@ -23,8 +23,15 @@ static esp_timer_handle_t start_ccw;
 static const char *TAG = "ROT_ROTATOR";
 
 
+#define INERTDEGR  "inertdegr"
+#define INERTMS    "inertms"
+#define BEAMWIDTH  "beamwidth"
+#define HARDSTOP   "hardstop"
+
+
 struct rotatorSettings setup =
 {
+    .hardStop = 0,
     .inertiaMs = 2000,
     .inertiaDegr = 1,
     .beamWidth = 10
@@ -80,8 +87,15 @@ static enum directionStates str2state(char *str)
     return stateStrings[i].state;
 }
 
+void rotator_show_settings(void)
+{
+    struct measurement meas;
+    meas.id = PUBLISH_ROTATOR_SETTINGS;
+    xQueueSend(evt_queue, &meas, 0);
+}
 
-void rotator_publish_state(char * prefix, enum directionStates state, esp_mqtt_client_handle_t client)
+
+static void rotator_publish_state(char * prefix, enum directionStates state, esp_mqtt_client_handle_t client)
 {
     time_t now;
     int retain = 1;
@@ -103,39 +117,91 @@ void rotator_publish_state(char * prefix, enum directionStates state, esp_mqtt_c
     statistics_getptr()->sendcnt++;
 }
 
+
+static void rotator_publish_settings(char * prefix, esp_mqtt_client_handle_t client)
+{
+    time_t now;
+    int retain = 1;
+
+    time(&now);
+    if (now < MIN_EPOCH)
+    {
+        now = 0;
+        retain = 0;
+    }
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"settings\",\"hardstop\":%d,\"ts\":%jd,\"inertiams\":%d, \"inertiadegr\":%d,\"beamwidth\":%d}";
+    sprintf(stateTopic,"%s/rotator/%x%x%x/settings", prefix, chipid[3], chipid[4], chipid[5]);
+
+    sprintf(jsondata, datafmt,
+                chipid[3],chipid[4],chipid[5],
+                setup.hardStop, now, setup.inertiaMs, setup.inertiaDegr, setup.beamWidth);
+    esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
+    statistics_getptr()->sendcnt++;
+}
+
+bool rotator_publish_event(char *prefix,struct measurement *meas, esp_mqtt_client_handle_t client)
+{
+    bool ret = false;
+
+    switch (meas->id)
+    {
+        case PUBLISH_ROTATOR_SETTINGS:
+            rotator_publish_settings(prefix, client);
+            ret = true;
+        break;
+
+        case ROTATORSTATE:
+            rotator_publish_state(prefix, meas->data.state, client);
+            ret = true;
+        break;
+
+        default:
+            ret = false;
+        break;
+    }
+    return ret;
+}
+
+
 void rotator_setsettings(struct rotatorSettings *newsetup)
 {
-    // TODO: store new values to flash
     bool wrote = false;
     if (newsetup->inertiaDegr != setup.inertiaDegr )
     {
         setup.inertiaDegr = newsetup->inertiaDegr;
-        flash_write(setup_flash, "inertdegr", newsetup->inertiaDegr);
+        flash_write(setup_flash, INERTDEGR, newsetup->inertiaDegr);
+        wrote = true;
     }
     if (newsetup->inertiaMs != setup.inertiaMs )
     {
         setup.inertiaMs = newsetup->inertiaMs;
-        flash_write(setup_flash, "inertms", newsetup->inertiaMs);
+        flash_write(setup_flash, INERTMS, newsetup->inertiaMs);
+        wrote = true;
     }
     if (newsetup->beamWidth != setup.beamWidth )
     {
         setup.beamWidth = newsetup->beamWidth;
-        flash_write(setup_flash, "beamwidth", newsetup->beamWidth);
+        flash_write(setup_flash, BEAMWIDTH, newsetup->beamWidth);
+        wrote = true;
     }
     if (newsetup->hardStop != setup.hardStop )
     {
         setup.hardStop = newsetup->hardStop;
-        flash_write(setup_flash, "hardstop", newsetup->hardStop);
+        flash_write(setup_flash, HARDSTOP, newsetup->hardStop);
+        wrote = true;
+        ESP_LOGI(TAG,"write hardstop %d", setup.hardStop);
     }
     if (wrote) flash_commitchanges(setup_flash);
 }
 
+
 void read_settings(void)
 {
-    setup.inertiaDegr = flash_read32(setup_flash, "inertdegr",setup.inertiaDegr);
-    setup.inertiaMs = flash_read32(setup_flash, "inertdegr", setup.inertiaMs);
-    setup.beamWidth = flash_read32(setup_flash, "beamwidth", setup.beamWidth);
-    setup.hardStop = flash_read32(setup_flash, "hardstop", setup.hardStop);
+    setup.inertiaDegr = flash_read(setup_flash, INERTDEGR,setup.inertiaDegr);
+    setup.inertiaMs = flash_read(setup_flash, INERTMS, setup.inertiaMs);
+    setup.beamWidth = flash_read(setup_flash, BEAMWIDTH, setup.beamWidth);
+    setup.hardStop = flash_read(setup_flash, HARDSTOP, setup.hardStop);
+    ESP_LOGI(TAG,"read hardstop %d", setup.hardStop);
 }
 
 static void start_turning(enum directionStates direction)
@@ -321,6 +387,11 @@ bool rotator_turned(int azim)
         currAzim = azim;
     }
     return ret; // true, if we still want to continue
+}
+
+struct rotatorSettings *rotator_getsettings()
+{
+    return &setup;
 }
 
 void rotator_init(uint8_t *chip)

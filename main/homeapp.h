@@ -14,6 +14,7 @@ enum meastype
     AZIMUTH,
     ROTATORSTATE,
     ADB_REFRESHED,
+    PUBLISH_ROTATOR_SETTINGS,
     REFRESHPOS,
     STATE,
     OTA

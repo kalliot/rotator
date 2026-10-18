@@ -89,12 +89,6 @@ struct netinfo {
     char *mqtt_prefix;
 };
 
-
-
-
-
-
-
 // globals
 
 struct netinfo *comminfo;
@@ -113,24 +107,23 @@ static int retry_num = 0;
 static char *program_version = "";
 static char appname[20];
 nvs_handle setup_flash;
-static int hardStop = 60; // pot zero is 60 degrees in antenna.
 
 static void sendInfo(esp_mqtt_client_handle_t client, uint8_t *chipid);
 
 static int correct2pot(int request)
 {
-    if (request < hardStop)
-        return request - hardStop +360;
+    if (request < rotator_getsettings()->hardStop)
+        return request - rotator_getsettings()->hardStop +360;
     else
-        return request - hardStop;
+        return request - rotator_getsettings()->hardStop;
 }
 
 static int correct2disp(int implementation)
 {
-    if (implementation + hardStop > 360)
-        return implementation + hardStop - 360;
+    if (implementation + rotator_getsettings()->hardStop > 360)
+        return implementation + rotator_getsettings()->hardStop - 360;
     else
-        return implementation + hardStop;
+        return implementation + rotator_getsettings()->hardStop;
 }
 
 static char *getJsonStr(cJSON *js, char *name)
@@ -231,7 +224,14 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 ota_start(fname);
             }
         }
-        // { "id":"newtarget","degr":90}
+        else if (!strcmp(id,"calmax"))
+        {
+            pot_set_calibr_high();
+        }
+        else if (!strcmp(id,"calmin"))
+        {
+            pot_set_calibr_low();
+        }
         else if (!strcmp(id,"newtarget"))
         {
             int target = -1;
@@ -301,7 +301,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             }
         }
 
-        else if (!strcmp(id,"settings"))
+        else if (!strcmp(id,"setsettings"))
         {
             struct rotatorSettings rotSetup;
 
@@ -310,6 +310,9 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
             getJsonInt(root,"inertiadegr", &rotSetup.inertiaDegr);
             getJsonInt(root,"beamwidth", &rotSetup.beamWidth);
             rotator_setsettings(&rotSetup);
+            rotator_show_settings();
+            pot_send_azimuth();
+            ESP_LOGI(TAG, "Settings saved");
         }
         cJSON_Delete(root);
     }
@@ -360,9 +363,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         char *name = "-";
         name = azimdb_find_nearest(corrected, 10);
         sendAzimuth(client, (uint8_t *) handler_args, corrected, name, now);
-
         healthyflags |= HEALTHYFLAGS_MQTT;
         display_connections();
+        rotator_show_settings();
         break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -398,7 +401,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
-
         }
         break;
     default:
@@ -747,16 +749,24 @@ void app_main(void)
                         if (isConnected) azimdb_publish(client, comminfo->mqtt_prefix, appname, now);
                     break;
 
-                    case ROTATORSTATE:
-                        if (isConnected) rotator_publish_state(comminfo->mqtt_prefix, meas.data.state, client);
-                    break;
-
                     case OTA:
                         ota_status_publish(&meas, client);
                     break;
 
                     default:
-                        ESP_LOGD(TAG, "unknown data type" );
+                        if (isConnected)
+                        {
+                            bool handled = rotator_publish_event(comminfo->mqtt_prefix, &meas, client);
+                            if (!handled)
+                            {
+                                ESP_LOGD(TAG, "unknown event" );
+                            }
+                        }
+                        else
+                        {
+                            ESP_LOGD(TAG, "net connected yet, event not handled" );
+                        }
+                    break;
                 }
             }
             else
