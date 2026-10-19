@@ -45,10 +45,7 @@ static inline esp_err_t oled_write_cmds(const uint8_t* cmds, size_t n) {
 
         // --- retry loop with optional mutex in case of conflicts with lora module ---
         for (int attempt = 0; attempt < 3; ++attempt) {
-
-            
             err = i2c_master_transmit(s_dev, buf, sizeof(buf), pdMS_TO_TICKS(100));
-
             if (err == ESP_OK) break; // success
             ESP_LOGW(TAG, "I2C cmd 0x%02X failed (try %d)", cmds[i], attempt + 1);
             vTaskDelay(pdMS_TO_TICKS(10)); // short pause between retries
@@ -138,6 +135,7 @@ esp_err_t oled_init(void) {
         },
     };
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &s_bus));
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -165,7 +163,6 @@ esp_err_t oled_init(void) {
         0xAF           // display on
     };
     ESP_ERROR_CHECK(oled_write_cmds(init_seq, sizeof(init_seq)));
-
     // Clear once after init to get rid of random garbage
     ESP_ERROR_CHECK(oled_clear());
 

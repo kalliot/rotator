@@ -354,7 +354,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         statistics_getptr()->connectcnt++;
         sendInfo(client, (uint8_t *) handler_args);
         azimdb_show();
-        //azimdb_publish(client, comminfo->mqtt_prefix, appname);
         int azimuth = pot_get_azimuth();
         time_t now;
 
@@ -390,7 +389,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         if (handleJson(event,(uint8_t *) handler_args))
         {
             azimdb_show();
-            //azimdb_publish(client, comminfo->mqtt_prefix, appname);
         }
         break;
 
