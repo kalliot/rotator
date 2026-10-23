@@ -27,6 +27,7 @@ static SemaphoreHandle_t mutex;
 
 static const char *TAG = "potreader";
 static int errState = 0;
+static adc_channel_t pot_channel;
 
 enum {
     CAL_MIN,
@@ -54,7 +55,7 @@ static int pot_read(void)
 {
     int adc_raw;
 
-    adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &adc_raw);
+    adc_oneshot_read(adc1_handle, pot_channel, &adc_raw);
     return adc_raw;
 }
 
@@ -198,8 +199,9 @@ void pot_set_tolerance(int tolerance)
     }
 }
 
-bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, int intervalMs, int cnt)
+bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, adc_channel_t channel, int intervalMs, int cnt)
 {
+    pot_channel = channel;
     mutex = xSemaphoreCreateMutex();
     if (mutex == NULL)
     {
@@ -216,7 +218,7 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, int intervalM
         .atten = ADC_ATTEN_DB_6
     };
     adc1_handle = adc_handle;
-    adc_oneshot_config_channel(adc_handle, ADC_CHANNEL_0, &config);
+    adc_oneshot_config_channel(adc1_handle, pot_channel, &config);
     // mutex is here not needed, we are not yet threading.
     azimuth = convert(pot_read());
     ESP_LOGI(TAG,"pot_init, first azimuth read is %f", azimuth);

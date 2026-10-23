@@ -32,6 +32,7 @@ void display_printf(enum displayline line, const char *format, ...)
     va_list args;
     char buffer[21];
 
+    buffer[0]=' ';
     if (format == NULL)
     {
         oled_draw_text(0,line,"                     ");
@@ -39,7 +40,7 @@ void display_printf(enum displayline line, const char *format, ...)
     else
     {
         va_start(args, format);
-        vsprintf(buffer, format, args);
+        vsprintf(&buffer[1], format, args);
         va_end(args);
         oled_draw_text(0, line, buffer);
     }
@@ -52,19 +53,19 @@ void display_turn(enum directionStates direction)
     switch (direction)
     {
         case STATE_CCW:
-            display_printf(turndirection, "<--            ");
+            display_printf(turndirection, "<--                ");
             break;
 
         case STATE_CW:
-            display_printf(turndirection, "            -->");
+            display_printf(turndirection, "                -->");
             break;
 
         case STATE_STILL:
-            display_printf(turndirection, "      ---      ");
+            display_printf(turndirection, "        ---        ");
             break;
 
         case STATE_NONE:
-            display_printf(turndirection, "               ");
+            display_printf(turndirection, "                   ");
             break;
 
         default:

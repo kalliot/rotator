@@ -173,9 +173,9 @@ static void log_error_if_nonzero(const char *message, int error_code)
 
 void display_connections(void)
 {
-    display_printf(commstatus, "%s %s %s",  (healthyflags & HEALTHYFLAGS_WIFI) ? "WIFI " : "     ",
-                                            (healthyflags & HEALTHYFLAGS_NTP)  ? "NTP  " : "     ",
-                                            (healthyflags & HEALTHYFLAGS_MQTT) ? "MQTT" : "    ");
+    display_printf(commstatus, "%s   %s   %s",  (healthyflags & HEALTHYFLAGS_WIFI) ? "WIFI " : "     ",
+                                                (healthyflags & HEALTHYFLAGS_NTP)  ? "NTP  " : "     ",
+                                                (healthyflags & HEALTHYFLAGS_MQTT) ? "MQTT" : "    ");
 }
 
 
@@ -658,7 +658,7 @@ void app_main(void)
 
         while (1)
         {
-            if (pot_init(chipid, adc_handle, 500, 7))
+            if (pot_init(chipid, adc_handle, ADC_CHANNEL_5, 500, 7))
                 break;
             else
                 vTaskDelay(1000 / portTICK_PERIOD_MS);

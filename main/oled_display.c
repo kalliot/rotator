@@ -30,9 +30,6 @@ static inline esp_err_t oled_write_cmd(uint8_t cmd) {
 }
 
 
-
-
-
 static inline esp_err_t oled_write_cmds(const uint8_t* cmds, size_t n) {
     if (!s_dev || !cmds || n == 0) {
         ESP_LOGE(TAG, "oled_write_cmds(): invalid args");
@@ -65,10 +62,10 @@ static inline esp_err_t oled_write_cmds(const uint8_t* cmds, size_t n) {
 
 static inline esp_err_t oled_write_data(const uint8_t* data, size_t n) {
     // data must be sent with control byte 0x40 in the SAME transaction
-    uint8_t buf[1 + 128];
+    uint8_t buf[1 + 132];
 
     while (n) {
-        size_t chunk = n > 128 ? 128 : n;
+        size_t chunk = n > 132 ? 132 : n;
         buf[0] = 0x40;                               // control=0x40 (data)
         memcpy(&buf[1], data, chunk);
 
@@ -80,7 +77,7 @@ static inline esp_err_t oled_write_data(const uint8_t* data, size_t n) {
 
             if (err == ESP_OK) break;               // success
             ESP_LOGW(TAG, "I2C data xfer failed (try %d)", attempt + 1);
-            vTaskDelay(pdMS_TO_TICKS(10));          // brief recovery delay
+            vTaskDelay(pdMS_TO_TICKS(12));          // brief recovery delay
         }
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "oled_write_data(): final fail after retries");
@@ -172,7 +169,7 @@ esp_err_t oled_init(void) {
 }
 
 esp_err_t oled_clear(void) {
-    uint8_t zero[128] = {0};
+    uint8_t zero[132] = {0};
     for (uint8_t page = 0; page < 8; ++page) {
         // set page & columns
         uint8_t addr_cmds[] = {
@@ -306,16 +303,13 @@ static const uint8_t font6x8[][6] = {
 #define FONT6X8_FIRST 32
 #define FONT6X8_LAST  127
 
-#define FONT6X8_WIDTH 6
-#define FONT6X8_FIRST 32
-#define FONT6X8_LAST  127
 
 esp_err_t oled_draw_text(uint8_t x, uint8_t page, const char *text)
 {
     if (!s_dev || !text) return ESP_ERR_INVALID_STATE;
-    if (page > 7 || x >= 128) return ESP_ERR_INVALID_ARG;
+    if (page > 7 || x >= 132) return ESP_ERR_INVALID_ARG;
 
-    while (*text && x < 128) {
+    while (*text && x < 132) {
         unsigned char c = (unsigned char)*text;
         if (c < FONT6X8_FIRST || c >= FONT6X8_LAST)
             c = '?'; // fallback for unsupported chars

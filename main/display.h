@@ -8,11 +8,11 @@ enum displayline
 {
     commstatus,
     dir_azimuth,
-    turndirection,
+    line2,
     line3,
     line4,
     line5,
-    line6,
+    turndirection,
     information
 };
 
