@@ -125,7 +125,7 @@ bool pot_save_calibrations(void)
 }
 
 
-float pot_get_azimuth(void)
+int pot_get_azimuth(void)
 {
     for (int i=0; i < 3; i++)
     {

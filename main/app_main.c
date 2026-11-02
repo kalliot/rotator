@@ -179,11 +179,13 @@ void display_connections(void)
 }
 
 
-static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, time_t now)
+static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, int speed, time_t now)
 {
     char targetTopic[60];
     int retain=1;
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"ts\":%jd}";
+
+    if (!isConnected) return false;
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"speed\":\"%d\",\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/parameters/azimuth", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
 
@@ -196,6 +198,7 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
                 chipid[3],chipid[4],chipid[5],
                 azimuth,
                 name,
+                speed,
                 now);
     esp_mqtt_client_publish(client, targetTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
@@ -305,10 +308,12 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         {
             struct rotatorSettings rotSetup;
 
+            ESP_LOGI(TAG, "got new settings");
             getJsonInt(root,"hardstop", &rotSetup.hardStop);
             getJsonInt(root,"inertiams", &rotSetup.inertiaMs);
             getJsonInt(root,"inertiadegr", &rotSetup.inertiaDegr);
             getJsonInt(root,"beamwidth", &rotSetup.beamWidth);
+            getJsonInt(root,"turnspeed", &rotSetup.turnSpeed);
             rotator_setsettings(&rotSetup);
             rotator_show_settings();
             pot_send_azimuth();
@@ -354,14 +359,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         statistics_getptr()->connectcnt++;
         sendInfo(client, (uint8_t *) handler_args);
         azimdb_show();
-        int azimuth = pot_get_azimuth();
-        time_t now;
-
-        time(&now);
-        int corrected = correct2disp(azimuth);
-        char *name = "-";
-        name = azimdb_find_nearest(corrected, 10);
-        sendAzimuth(client, (uint8_t *) handler_args, corrected, name, now);
         healthyflags |= HEALTHYFLAGS_MQTT;
         display_connections();
         rotator_show_settings();
@@ -585,6 +582,7 @@ void app_main(void)
 {
     uint8_t chipid[8];
     time_t now, prevStatsTs, stoppedTs = 0;
+    int prevAzimuth = -1;
     adc_oneshot_unit_handle_t adc_handle;
 
     esp_efuse_mac_get_default(chipid);
@@ -724,7 +722,16 @@ void app_main(void)
                         {
                             stoppedTs = now;
                         }    
-                        if (isConnected) sendAzimuth(client, chipid, correct2disp(azimuth), name, now);
+                        int turnspeed = rotator_get_turnspeed();
+                        // do not send azimuth if rotator is supposed to turn clockwise and azimuth has decreased and wise versa.
+                        // when still send azimuth anyway.
+                        if (rotator_isturning_ccw() && azimuth < prevAzimuth)
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                        else if (rotator_isturning_cw() && azimuth > prevAzimuth)
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                        else if (!rotator_isturning_cw() && !rotator_isturning_ccw())
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                        prevAzimuth = azimuth;
                     break;
 
                     case STATE:
@@ -732,12 +739,12 @@ void app_main(void)
                         if (meas.data.state)
                         {
                             pot_set_tolerance(1);
-                            if (meas.gpio == CWBUTTON_GPIO) rotator_turn(STATE_CW);
-                            if (meas.gpio == CCWBUTTON_GPIO) rotator_turn(STATE_CCW);
+                            if (meas.gpio == CWBUTTON_GPIO) rotator_turn(STATE_CW, REASON_BUTTON);
+                            if (meas.gpio == CCWBUTTON_GPIO) rotator_turn(STATE_CCW, REASON_BUTTON);
                         }
                         else
                         {
-                            rotator_turn(STATE_STILL);
+                            rotator_turn(STATE_STILL, REASON_BUTTON);
                             stoppedTs = now;
                         }
                         stateread_done(&meas);

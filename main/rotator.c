@@ -17,27 +17,30 @@ static bool turningCCW = false;
 static bool initDone = false;
 static char stateTopic[64];
 static uint8_t *chipid;
-static uint64_t stoppedTic = 0;
 static esp_timer_handle_t start_cw;
 static esp_timer_handle_t start_ccw;
 static const char *TAG = "ROT_ROTATOR";
+
+static int startedDegr = 0;
+static uint64_t stoppedTic = 0;
+static uint64_t startedTic = 0;
+
 
 
 #define INERTDEGR  "inertdegr"
 #define INERTMS    "inertms"
 #define BEAMWIDTH  "beamwidth"
 #define HARDSTOP   "hardstop"
-
+#define TURNSPEED  "turnspeed"
 
 struct rotatorSettings setup =
 {
     .hardStop = 0,
     .inertiaMs = 2000,
     .inertiaDegr = 1,
-    .beamWidth = 10
+    .beamWidth = 10,
+    .turnSpeed = 25
 };
-
-
 
 enum machine_states
 {
@@ -57,13 +60,41 @@ struct stateRec
     { STATE_NONE, "none"}
 };    
 
-static void queue_state(enum directionStates state)
+struct reasonRec
+{
+    enum reasons reason;
+    char *reasonname;
+} reasonStrings[] =
+{
+    { REASON_BUTTON, "button"},
+    { REASON_DIRCHANGE, "dirchange"},
+    { REASON_MQTT, "mqtt"},
+    { REASON_TARGET, "target"},
+    { REASON_TIMEOUT, "timeout"},
+    { REASON_NONE, "none"},
+};
+
+
+static void queue_state(enum directionStates state, enum reasons reason)
 {
     struct measurement meas;
     meas.id = ROTATORSTATE;
     meas.data.rotatorstate = state;
+    meas.reason = reason;
     xQueueSend(evt_queue, &meas, 0);
 }
+
+static char *reasonStr(enum reasons reason)
+{
+    int i;
+
+    for (i=0; reasonStrings[i].reason != REASON_NONE; i++)
+    {
+        if (reasonStrings[i].reason == reason) break;
+    }
+    return reasonStrings[i].reasonname;
+}
+
 
 static char *stateStr(enum directionStates state)
 {
@@ -95,7 +126,7 @@ void rotator_show_settings(void)
 }
 
 
-static void rotator_publish_state(char * prefix, enum directionStates state, esp_mqtt_client_handle_t client)
+static void publish_state(char * prefix, enum directionStates state, enum reasons reason, esp_mqtt_client_handle_t client)
 {
     time_t now;
     int retain = 1;
@@ -106,12 +137,13 @@ static void rotator_publish_state(char * prefix, enum directionStates state, esp
         now = 0;
         retain = 0;
     }
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestate\",\"state\":\"%s\",\"ts\":%jd}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestate\",\"state\":\"%s\",\"reason\":\"%s\",\"ts\":%jd}";
     sprintf(stateTopic,"%s/rotator/%x%x%x/state", prefix, chipid[3], chipid[4], chipid[5]);
 
     sprintf(jsondata, datafmt,
                 chipid[3],chipid[4],chipid[5],
                 stateStr(state),
+                reasonStr(reason),
                 now);
     esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
@@ -129,12 +161,12 @@ static void rotator_publish_settings(char * prefix, esp_mqtt_client_handle_t cli
         now = 0;
         retain = 0;
     }
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"settings\",\"hardstop\":%d,\"ts\":%jd,\"inertiams\":%d, \"inertiadegr\":%d,\"beamwidth\":%d}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"settings\",\"hardstop\":%d,\"ts\":%jd,\"inertiams\":%d, \"inertiadegr\":%d,\"beamwidth\":%d,\"turnspeed\":%d}";
     sprintf(stateTopic,"%s/rotator/%x%x%x/settings", prefix, chipid[3], chipid[4], chipid[5]);
 
     sprintf(jsondata, datafmt,
                 chipid[3],chipid[4],chipid[5],
-                setup.hardStop, now, setup.inertiaMs, setup.inertiaDegr, setup.beamWidth);
+                setup.hardStop, now, setup.inertiaMs, setup.inertiaDegr, setup.beamWidth, setup.turnSpeed);
     esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
 }
@@ -151,7 +183,7 @@ bool rotator_publish_event(char *prefix,struct measurement *meas, esp_mqtt_clien
         break;
 
         case ROTATORSTATE:
-            rotator_publish_state(prefix, meas->data.state, client);
+            publish_state(prefix, meas->data.state, meas->reason, client);
             ret = true;
         break;
 
@@ -191,6 +223,13 @@ void rotator_setsettings(struct rotatorSettings *newsetup)
         wrote = true;
         ESP_LOGI(TAG,"write hardstop %d", setup.hardStop);
     }
+    if (newsetup->turnSpeed != setup.turnSpeed )
+    {
+        setup.turnSpeed = newsetup->turnSpeed;
+        flash_write(setup_flash, TURNSPEED, newsetup->turnSpeed);
+        wrote = true;
+        ESP_LOGI(TAG,"write turnspeed %d", setup.turnSpeed);
+    }
     if (wrote) flash_commitchanges(setup_flash);
 }
 
@@ -201,7 +240,7 @@ void read_settings(void)
     setup.inertiaMs = flash_read(setup_flash, INERTMS, setup.inertiaMs);
     setup.beamWidth = flash_read(setup_flash, BEAMWIDTH, setup.beamWidth);
     setup.hardStop = flash_read(setup_flash, HARDSTOP, setup.hardStop);
-    ESP_LOGI(TAG,"read hardstop %d", setup.hardStop);
+    setup.turnSpeed = flash_read(setup_flash, TURNSPEED, setup.turnSpeed);
 }
 
 static void start_turning(enum directionStates direction)
@@ -224,12 +263,16 @@ static void start_turning(enum directionStates direction)
         case STATE_CW:
             gpio_set_level(CWRELAY_GPIO, true);
             turningCW = true;
+            startedTic = nowTic;
+            startedDegr = pot_get_azimuth();
             display_turn(STATE_CW);
         break;
 
         case STATE_CCW:
             gpio_set_level(CCWRELAY_GPIO, true);
             turningCCW = true;
+            startedTic = nowTic;
+            startedDegr = pot_get_azimuth();
             display_turn(STATE_CCW);
         break;
 
@@ -237,8 +280,19 @@ static void start_turning(enum directionStates direction)
             ESP_LOGI(TAG,"unknown turning direction, nothing done!");
             return;
     }
-    queue_state(direction);
+    queue_state(direction, REASON_NONE);
 }
+
+bool rotator_isturning_ccw(void)
+{
+    return turningCCW;
+}
+
+bool rotator_isturning_cw(void)
+{
+    return turningCW;
+}
+
 
 static void start_timered_turn_callback(void *arg)
 {
@@ -247,20 +301,46 @@ static void start_timered_turn_callback(void *arg)
 }
 
 
-static void stop_turning(void)
+ void stop_turning(enum reasons reason)
 {
     gpio_set_level(CCWRELAY_GPIO, false);
     gpio_set_level(CWRELAY_GPIO, false);
 
     stoppedTic = esp_timer_get_time();
-    queue_state(STATE_STILL);
+    queue_state(STATE_STILL, reason);
     display_turn(STATE_STILL);
     turningCCW = false;
     turningCW = false;
+    startedTic = 0;
+}
+
+int rotator_get_turnspeed(void)
+{
+    int turnSpeed = 0;
+    uint64_t currTic = esp_timer_get_time();
+    int currDegr = pot_get_azimuth();
+    int turnSeconds = (currTic - startedTic) / 1000000;
+
+    int degsTurned = currDegr - startedDegr;
+    if (turnSeconds > 0)
+    {
+        turnSpeed = abs(10 * degsTurned / turnSeconds);
+    }
+
+    if (startedTic != 0 && turnSeconds != 0)
+    {
+        ESP_LOGI(TAG,"turn of %d degrees took %d seconds", degsTurned, turnSeconds);
+        ESP_LOGI(TAG,"turn speed was %d degrees / 10sec", turnSpeed);
+        if (turnSeconds > 10 && turnSpeed < (setup.turnSpeed * 0.75))
+        {
+            stop_turning(REASON_TIMEOUT);
+        }
+    }
+    return turnSpeed;
 }
 
 
-bool rotator_turn(enum directionStates direction)
+bool rotator_turn(enum directionStates direction, enum reasons reason)
 {
     bool ret = false;
 
@@ -270,7 +350,7 @@ bool rotator_turn(enum directionStates direction)
     {
         case STATE_CCW:
             if (turningCW)
-            {   stop_turning();
+            {   stop_turning(REASON_DIRCHANGE);
                 ESP_ERROR_CHECK(esp_timer_start_once(start_ccw, setup.inertiaMs * 1000));
             }
             else 
@@ -285,10 +365,11 @@ bool rotator_turn(enum directionStates direction)
         case STATE_CW:
             if (turningCCW)
             {
-                stop_turning();
+                stop_turning(REASON_DIRCHANGE);
                 ESP_ERROR_CHECK(esp_timer_start_once(start_cw, setup.inertiaMs * 1000));
             }
-            else {
+            else
+            {
                 start_turning(STATE_CW);
                 display_turn(direction);
             }
@@ -299,8 +380,7 @@ bool rotator_turn(enum directionStates direction)
         case STATE_STILL:
             esp_timer_stop(start_ccw);
             esp_timer_stop(start_cw);
-            stop_turning();
-            //vTaskDelay(setup.inertiaMs / portTICK_PERIOD_MS);
+            stop_turning(reason);
         break;
 
         case STATE_NONE:
@@ -312,7 +392,7 @@ bool rotator_turn(enum directionStates direction)
 
 bool rotator_turn_bystr(char *dirStr)
 {
-    return rotator_turn(str2state(dirStr));
+    return rotator_turn(str2state(dirStr), REASON_MQTT);
 }
 
 bool rotator_turn2target(int target)
@@ -344,7 +424,7 @@ bool rotator_turn2target(int target)
     if ((targetAzim - tolerance) > currAzim)
     {
         if (turningCCW)
-        {   stop_turning();
+        {   stop_turning(REASON_DIRCHANGE);
             ESP_ERROR_CHECK(esp_timer_start_once(start_cw,  setup.inertiaMs * 1000));
         }
         else start_turning(STATE_CW);
@@ -355,7 +435,7 @@ bool rotator_turn2target(int target)
     {
         if (turningCW)
         {
-            stop_turning();
+            stop_turning(REASON_DIRCHANGE);
             ESP_ERROR_CHECK(esp_timer_start_once(start_ccw,  setup.inertiaMs * 1000));
         }
         else start_turning(STATE_CCW);
@@ -374,13 +454,13 @@ bool rotator_turned(int azim)
     {
         if (turningCW && (azim >= (targetAzim - setup.inertiaDegr)))
         {
-            stop_turning();
+            stop_turning(REASON_TARGET);
             ESP_LOGI(TAG,"ended turn cw to target %d, azim=%d", targetAzim, azim);
             ret = false;
         }
         if (turningCCW && (azim <= (targetAzim + setup.inertiaDegr)))
         {
-            stop_turning();
+            stop_turning(REASON_TARGET);
             ESP_LOGI(TAG,"ended turn ccw to target %d, azim=%d", targetAzim, azim);
             ret = false;
         }

@@ -28,12 +28,21 @@ enum directionStates
     STATE_NONE
 };
 
+enum reasons {
+    REASON_TIMEOUT,  // turning too slowly, timeout
+    REASON_BUTTON,   // user pressed a physical button
+    REASON_DIRCHANGE,// normal stop before changing the turn direction
+    REASON_MQTT,     // stopped because of a mqtt command
+    REASON_TARGET,   // reached the target azimuth.
+    REASON_NONE
+};
+
 
 struct measurement {
     enum meastype id;
     int gpio;
     int err;
-
+    enum reasons reason;
     union {
         int count;
         int state;
