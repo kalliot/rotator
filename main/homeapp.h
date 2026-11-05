@@ -15,6 +15,7 @@ enum meastype
     ROTATORSTATE,
     ADB_REFRESHED,
     PUBLISH_ROTATOR_SETTINGS,
+    PUBLISH_POT_CALIBR,
     REFRESHPOS,
     STATE,
     OTA
@@ -34,9 +35,15 @@ enum reasons {
     REASON_DIRCHANGE,// normal stop before changing the turn direction
     REASON_MQTT,     // stopped because of a mqtt command
     REASON_TARGET,   // reached the target azimuth.
+    REASON_TURNTO,
     REASON_NONE
 };
 
+struct directionCtrl
+{
+    enum directionStates rotatorstate;
+    int targetAzim;
+};
 
 struct measurement {
     enum meastype id;
@@ -45,8 +52,9 @@ struct measurement {
     enum reasons reason;
     union {
         int count;
-        int state;
-        enum directionStates rotatorstate;
+        int state; // used for buttons
+        struct directionCtrl dirstates;
+        //enum directionStates rotatorstate;
         int azimuth;
     } data;
 };

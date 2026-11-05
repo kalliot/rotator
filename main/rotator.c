@@ -11,6 +11,7 @@
 
 
 static int targetAzim = -1;
+static int dispTargetAzim = -1;
 static int currAzim = -1;
 static bool turningCW = false;
 static bool turningCCW = false;
@@ -71,15 +72,17 @@ struct reasonRec
     { REASON_MQTT, "mqtt"},
     { REASON_TARGET, "target"},
     { REASON_TIMEOUT, "timeout"},
+    { REASON_TURNTO, "turnto"},
     { REASON_NONE, "none"},
 };
 
 
-static void queue_state(enum directionStates state, enum reasons reason)
+static void queue_state(enum directionStates state, int targetAzim, enum reasons reason)
 {
     struct measurement meas;
     meas.id = ROTATORSTATE;
-    meas.data.rotatorstate = state;
+    meas.data.dirstates.rotatorstate = state;
+    meas.data.dirstates.targetAzim = targetAzim;
     meas.reason = reason;
     xQueueSend(evt_queue, &meas, 0);
 }
@@ -126,7 +129,7 @@ void rotator_show_settings(void)
 }
 
 
-static void publish_state(char * prefix, enum directionStates state, enum reasons reason, esp_mqtt_client_handle_t client)
+static void publish_state(char * prefix, struct directionCtrl *dirCtrl, enum reasons reason, esp_mqtt_client_handle_t client)
 {
     time_t now;
     int retain = 1;
@@ -137,13 +140,14 @@ static void publish_state(char * prefix, enum directionStates state, enum reason
         now = 0;
         retain = 0;
     }
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestate\",\"state\":\"%s\",\"reason\":\"%s\",\"ts\":%jd}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"movestate\",\"state\":\"%s\",\"reason\":\"%s\",\"target\":%d,\"ts\":%jd}";
     sprintf(stateTopic,"%s/rotator/%x%x%x/state", prefix, chipid[3], chipid[4], chipid[5]);
 
     sprintf(jsondata, datafmt,
                 chipid[3],chipid[4],chipid[5],
-                stateStr(state),
+                stateStr(dirCtrl->rotatorstate),
                 reasonStr(reason),
+                dirCtrl->targetAzim,
                 now);
     esp_mqtt_client_publish(client, stateTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
@@ -183,7 +187,7 @@ bool rotator_publish_event(char *prefix,struct measurement *meas, esp_mqtt_clien
         break;
 
         case ROTATORSTATE:
-            publish_state(prefix, meas->data.state, meas->reason, client);
+            publish_state(prefix, &meas->data.dirstates, meas->reason, client);
             ret = true;
         break;
 
@@ -243,7 +247,7 @@ void read_settings(void)
     setup.turnSpeed = flash_read(setup_flash, TURNSPEED, setup.turnSpeed);
 }
 
-static void start_turning(enum directionStates direction)
+static void start_turning(enum directionStates direction, int targetAzim)
 {
     uint64_t nowTic = esp_timer_get_time();
 
@@ -280,7 +284,7 @@ static void start_turning(enum directionStates direction)
             ESP_LOGI(TAG,"unknown turning direction, nothing done!");
             return;
     }
-    queue_state(direction, REASON_NONE);
+    queue_state(direction, targetAzim, REASON_TURNTO);
 }
 
 bool rotator_isturning_ccw(void)
@@ -297,7 +301,7 @@ bool rotator_isturning_cw(void)
 static void start_timered_turn_callback(void *arg)
 {
     enum directionStates *direction = (enum directionStates *) arg;
-    start_turning(*direction);
+    start_turning(*direction, dispTargetAzim);
 }
 
 
@@ -307,7 +311,7 @@ static void start_timered_turn_callback(void *arg)
     gpio_set_level(CWRELAY_GPIO, false);
 
     stoppedTic = esp_timer_get_time();
-    queue_state(STATE_STILL, reason);
+    queue_state(STATE_STILL, -1, reason);
     display_turn(STATE_STILL);
     turningCCW = false;
     turningCW = false;
@@ -355,7 +359,7 @@ bool rotator_turn(enum directionStates direction, enum reasons reason)
             }
             else 
             {
-                start_turning(STATE_CCW);
+                start_turning(STATE_CCW, -1);
                 display_turn(direction);
             }
             stateMachine = SM_BUTTON;
@@ -370,7 +374,7 @@ bool rotator_turn(enum directionStates direction, enum reasons reason)
             }
             else
             {
-                start_turning(STATE_CW);
+                start_turning(STATE_CW,-1);
                 display_turn(direction);
             }
             stateMachine = SM_BUTTON;
@@ -395,39 +399,41 @@ bool rotator_turn_bystr(char *dirStr)
     return rotator_turn(str2state(dirStr), REASON_MQTT);
 }
 
-bool rotator_turn2target(int target)
+bool rotator_turn2target(int potTarget, int dispTarget)
 {
     bool ret = false;
-    if (target == -1) return ret;
+    if (potTarget == -1) return ret;
 
     int tolerance = setup.beamWidth / 2;
-    ESP_LOGI(TAG,"received turn to %d command", target);
+    dispTargetAzim = -1;
+    ESP_LOGI(TAG,"received turn to %d command", potTarget);
     // we are close to cw end and target is close to ccw end,
     // then turn to closest end.
     // example1: currentAzim = 357 and target = 3 --> dont turn a long turn, instead turn to cw endpoint ie 360.
-    if (((360 - currAzim) < 90) && (target < tolerance))
+    if (((360 - currAzim) < 90) && (potTarget < tolerance))
     {
         ESP_LOGI(TAG,"optimising long ccw rotation to short cw rotation");
         targetAzim = 360;
         tolerance = 0; // beamwidht is already in use
     }
-    // example2: currentAzim = 3 and target = 357 --> dont turn a long turn, instead turn to ccw endpoint ie 0.
-    else if (((360 - currAzim) > (360 - 90)) && target > (360 - tolerance))
+    // example2: currentAzim = 3 and potTarget = 357 --> dont turn a long turn, instead turn to ccw endpoint ie 0.
+    else if (((360 - currAzim) > (360 - 90)) && potTarget > (360 - tolerance))
     {
         ESP_LOGI(TAG,"optimising long cw rotation to short ccw rotation");
         targetAzim = 0;
         tolerance = 0; // beamwidht is already in use
     }
     else
-        targetAzim = target;
+        targetAzim = potTarget;
 
     if ((targetAzim - tolerance) > currAzim)
     {
         if (turningCCW)
         {   stop_turning(REASON_DIRCHANGE);
+            dispTargetAzim = dispTarget;
             ESP_ERROR_CHECK(esp_timer_start_once(start_cw,  setup.inertiaMs * 1000));
         }
-        else start_turning(STATE_CW);
+        else start_turning(STATE_CW, dispTarget);
         stateMachine = SM_TARGET;
         ret = true;
     }
@@ -436,11 +442,16 @@ bool rotator_turn2target(int target)
         if (turningCW)
         {
             stop_turning(REASON_DIRCHANGE);
+            dispTargetAzim = dispTarget;
             ESP_ERROR_CHECK(esp_timer_start_once(start_ccw,  setup.inertiaMs * 1000));
         }
-        else start_turning(STATE_CCW);
+        else start_turning(STATE_CCW, dispTarget);
         stateMachine = SM_TARGET;
         ret = true;
+    }
+    else if (turningCW || turningCCW)
+    {
+        stop_turning(REASON_TARGET);
     }
     return ret;
 }
@@ -464,8 +475,8 @@ bool rotator_turned(int azim)
             ESP_LOGI(TAG,"ended turn ccw to target %d, azim=%d", targetAzim, azim);
             ret = false;
         }
-        currAzim = azim;
     }
+    currAzim = azim;
     return ret; // true, if we still want to continue
 }
 

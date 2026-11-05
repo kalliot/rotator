@@ -199,6 +199,40 @@ void pot_set_tolerance(int tolerance)
     }
 }
 
+void pot_publish_potcalibr(esp_mqtt_client_handle_t client, char *prefix, uint8_t *chipid, char *name)
+{
+    char targetTopic[60];
+    int retain=1;
+    time_t now;
+
+    time(&now);
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"calibrations\",\"min\":%d,\"max\":\"%d\",\"ts\":%jd}";
+
+    sprintf(targetTopic,"%s/%s/%x%x%x/calibrations", prefix, name, chipid[3], chipid[4], chipid[5]);
+
+    if (now < MIN_EPOCH)
+    {
+        retain = 0;
+        now = 0;
+    }
+    sprintf(jsondata, datafmt,
+                chipid[3],chipid[4],chipid[5],
+                pot_get_calibr_low(),
+                pot_get_calibr_high(),
+                now);
+    esp_mqtt_client_publish(client, targetTopic, jsondata , 0, 0, retain);
+    statistics_getptr()->sendcnt++;
+}
+
+
+void pot_show_carlibr(void)
+{
+    struct measurement meas;
+    meas.id = PUBLISH_POT_CALIBR;
+    xQueueSend(evt_queue, &meas, 0);
+}
+
+
 bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, adc_channel_t channel, int intervalMs, int cnt)
 {
     pot_channel = channel;
@@ -209,14 +243,15 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, adc_channel_t
         return false;
     }
     samplecnt = cnt;
-    calibr[CAL_MIN].raw      = flash_read(setup_flash, calibr[CAL_MIN].rawname,  calibr[CAL_MIN].raw);
-    calibr[CAL_MAX].raw      = flash_read(setup_flash, calibr[CAL_MAX].rawname,  calibr[CAL_MAX].raw);
+    calibr[CAL_MIN].raw  = flash_read(setup_flash, calibr[CAL_MIN].rawname,  calibr[CAL_MIN].raw);
+    calibr[CAL_MAX].raw  = flash_read(setup_flash, calibr[CAL_MAX].rawname,  calibr[CAL_MAX].raw);
 
     chipid = chip;
     adc_oneshot_chan_cfg_t config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,
         .atten = ADC_ATTEN_DB_6
     };
+    ESP_LOGI(TAG,"calibration raw values are: min=%d, max=%d", calibr[CAL_MIN].raw, calibr[CAL_MAX].raw);
     adc1_handle = adc_handle;
     adc_oneshot_config_channel(adc1_handle, pot_channel, &config);
     // mutex is here not needed, we are not yet threading.

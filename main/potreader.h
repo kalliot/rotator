@@ -13,6 +13,8 @@ extern int pot_get_calibr_high();
 extern int pot_get_azimuth(void);
 extern void pot_send_azimuth(void);
 extern void pot_set_tolerance(int tolerance);
+extern void pot_publish_potcalibr(esp_mqtt_client_handle_t client, char *prefix, uint8_t *chipid, char *name);
+extern void pot_show_carlibr(void);
 extern void  pot_save_calibrations(void);
 extern bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, adc_channel_t channel, int intervalMs, int cnt);
 extern void  pot_close(void);

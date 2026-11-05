@@ -230,10 +230,17 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         else if (!strcmp(id,"calmax"))
         {
             pot_set_calibr_high();
+            pot_show_carlibr();
         }
         else if (!strcmp(id,"calmin"))
         {
             pot_set_calibr_low();
+            pot_show_carlibr();
+        }
+        else if (!strcmp(id,"savecalibr"))
+        {
+            pot_save_calibrations();
+            pot_show_carlibr();
         }
         else if (!strcmp(id,"newtarget"))
         {
@@ -246,23 +253,26 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 }
                 else
                 {
-                    display_printf(information,"got target %d", target);
-                    if (rotator_turn2target(correct2pot(target))) pot_set_tolerance(1);
+                    display_printf(information,"got target %d     ", target);
+                    if (rotator_turn2target(correct2pot(target), target)) pot_set_tolerance(1);
                 }
             }
         }
         else if (!strcmp(id,"namedtarget"))
         {
             char name[20];
-            struct directionNames *target = NULL;
+            struct directionNames *targetRec = NULL;
 
             strcpy(name, getJsonStr(root,"name"));
-            target = azimdb_find_named(name);
-            if (target != NULL)
+            targetRec = azimdb_find_named(name);
+            if (targetRec != NULL)
             {
                 display_printf(information,"turn %12s", name);
                 {
-                    if (rotator_turn2target(correct2pot(target->azimuth))) pot_set_tolerance(1);
+                    if (rotator_turn2target(correct2pot(targetRec->azimuth), targetRec->azimuth))
+                    {
+                        pot_set_tolerance(1);
+                    }
                 }
             }
             else
@@ -357,6 +367,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         device_sendstatus(client, comminfo->mqtt_prefix, appname, (uint8_t *) handler_args);
         isConnected = true;
         statistics_getptr()->connectcnt++;
+        pot_show_carlibr();
         sendInfo(client, (uint8_t *) handler_args);
         azimdb_show();
         healthyflags |= HEALTHYFLAGS_MQTT;
@@ -656,7 +667,7 @@ void app_main(void)
 
         while (1)
         {
-            if (pot_init(chipid, adc_handle, ADC_CHANNEL_5, 500, 7))
+            if (pot_init(chipid, adc_handle, ADC_CHANNEL_5, 250, 7))
                 break;
             else
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -749,6 +760,11 @@ void app_main(void)
                         }
                         stateread_done(&meas);
                     break;
+
+                    case PUBLISH_POT_CALIBR:
+                        if (isConnected) pot_publish_potcalibr(client, comminfo->mqtt_prefix, chipid, appname);
+                    break;
+
 
                     case ADB_REFRESHED:
                         if (isConnected) azimdb_publish(client, comminfo->mqtt_prefix, appname, now);
