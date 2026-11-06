@@ -22,6 +22,7 @@
 static i2c_master_bus_handle_t s_bus  = NULL;
 static i2c_master_dev_handle_t s_dev  = NULL;
 static bool s_initialized = false;
+static bool display_found = false;
 
 // ------------------ helpers ------------------
 static inline esp_err_t oled_write_cmd(uint8_t cmd) {
@@ -131,6 +132,7 @@ esp_err_t oled_init(void) {
             .enable_internal_pullup = true, // helps if the board lacks/has weak externals
         },
     };
+
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &s_bus));
     vTaskDelay(pdMS_TO_TICKS(10));
 
@@ -139,6 +141,7 @@ esp_err_t oled_init(void) {
         .device_address  = OLED_I2C_ADDR,
         .scl_speed_hz    = I2C_FREQ_HZ,
     };
+
     ESP_ERROR_CHECK(i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev));
 
     // SSD1306 init sequence (128x64)
@@ -159,16 +162,28 @@ esp_err_t oled_init(void) {
         0x8D, 0x14,    // charge pump on
         0xAF           // display on
     };
-    ESP_ERROR_CHECK(oled_write_cmds(init_seq, sizeof(init_seq)));
-    // Clear once after init to get rid of random garbage
-    ESP_ERROR_CHECK(oled_clear());
 
-    ESP_LOGI(TAG, "OLED initialized successfully");
-    s_initialized = true;
+    display_found = (oled_write_cmds(init_seq, sizeof(init_seq)) == ESP_OK);
+
+    if (display_found)
+    {
+        // Clear once after init to get rid of random garbage
+        ESP_ERROR_CHECK(oled_clear());
+
+        ESP_LOGI(TAG, "OLED initialized successfully");
+        s_initialized = true;
+    }
+    else
+    {
+        ESP_LOGI(TAG,"<----- Problems in init oled display. Continuing without it. ------>");
+    }
     return ESP_OK;
 }
 
 esp_err_t oled_clear(void) {
+
+    if (!display_found) return ESP_OK;
+
     uint8_t zero[132] = {0};
     for (uint8_t page = 0; page < 8; ++page) {
         // set page & columns
@@ -306,6 +321,8 @@ static const uint8_t font6x8[][6] = {
 
 esp_err_t oled_draw_text(uint8_t x, uint8_t page, const char *text)
 {
+    if (!display_found) return ESP_OK;
+
     if (!s_dev || !text) return ESP_ERR_INVALID_STATE;
     if (page > 7 || x >= 132) return ESP_ERR_INVALID_ARG;
 
