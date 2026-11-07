@@ -82,12 +82,12 @@ struct reasonRec
 };
 
 
-static void queue_state(enum directionStates state, int targetAzim, enum reasons reason)
+static void queue_state(enum directionStates state, int target, enum reasons reason)
 {
     struct measurement meas;
     meas.id = ROTATORSTATE;
     meas.data.dirstates.rotatorstate = state;
-    meas.data.dirstates.targetAzim = targetAzim;
+    meas.data.dirstates.targetAzim = target;
     meas.reason = reason;
     xQueueSend(evt_queue, &meas, 0);
 }
@@ -252,7 +252,7 @@ void read_settings(void)
     setup.turnSpeed = flash_read(setup_flash, TURNSPEED, setup.turnSpeed);
 }
 
-static void start_turning(enum directionStates direction, int targetAzim)
+static void start_turning(enum directionStates direction, int target)
 {
     uint64_t nowTic = esp_timer_get_time();
 
@@ -267,12 +267,13 @@ static void start_turning(enum directionStates direction, int targetAzim)
             vTaskDelay(pdMS_TO_TICKS(setup.inertiaMs - sinceStopped));
         }
     }
+    queue_state(direction, target, REASON_TURNTO);
     switch (direction)
     {
         case STATE_CCW:
             gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // actially this is just for code clarity.
             gpio_set_level(MAINSRELAY_GPIO, true);  // feed mains to the big transformer
-            turningCW = true;
+            turningCCW = true;
             startedTic = nowTic;
             startedDegr = pot_get_azimuth();
             display_turn(STATE_CCW);
@@ -282,7 +283,7 @@ static void start_turning(enum directionStates direction, int targetAzim)
             gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CW); // turn 24v directionrelay on
             vTaskDelay(pdMS_TO_TICKS(RELAYSYNCMS));      // be sure it was turned first
             gpio_set_level(MAINSRELAY_GPIO, true);  // feed mains to the big transformer
-            turningCCW = true;
+            turningCW = true;
             startedTic = nowTic;
             startedDegr = pot_get_azimuth();
             display_turn(STATE_CW);
@@ -292,7 +293,6 @@ static void start_turning(enum directionStates direction, int targetAzim)
             ESP_LOGI(TAG,"unknown turning direction, nothing done!");
             return;
     }
-    queue_state(direction, targetAzim, REASON_TURNTO);
 }
 
 bool rotator_isturning_ccw(void)
@@ -315,11 +315,11 @@ static void start_timered_turn_callback(void *arg)
 
  void stop_turning(enum reasons reason)
 {
+    queue_state(STATE_STILL, -1, reason);
     gpio_set_level(MAINSRELAY_GPIO, false); // take 230v off first, THIS IS IMPORTANT.
     vTaskDelay(pdMS_TO_TICKS(RELAYSYNCMS));
     gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // and then 24v
     stoppedTic = esp_timer_get_time();
-    queue_state(STATE_STILL, -1, reason);
     display_turn(STATE_STILL);
     turningCCW = false;
     turningCW = false;
