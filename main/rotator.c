@@ -34,6 +34,11 @@ static uint64_t startedTic = 0;
 #define HARDSTOP   "hardstop"
 #define TURNSPEED  "turnspeed"
 
+#define DIRECTION_CW      true
+#define DIRECTION_CCW     false
+
+#define RELAYSYNCMS    50
+
 struct rotatorSettings setup =
 {
     .hardStop = 0,
@@ -264,20 +269,23 @@ static void start_turning(enum directionStates direction, int targetAzim)
     }
     switch (direction)
     {
-        case STATE_CW:
-            gpio_set_level(CWRELAY_GPIO, true);
+        case STATE_CCW:
+            gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // actially this is just for code clarity.
+            gpio_set_level(MAINSRELAY_GPIO, true);  // feed mains to the big transformer
             turningCW = true;
             startedTic = nowTic;
             startedDegr = pot_get_azimuth();
-            display_turn(STATE_CW);
+            display_turn(STATE_CCW);
         break;
 
-        case STATE_CCW:
-            gpio_set_level(CCWRELAY_GPIO, true);
+        case STATE_CW:
+            gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CW); // turn 24v directionrelay on
+            vTaskDelay(pdMS_TO_TICKS(RELAYSYNCMS));      // be sure it was turned first
+            gpio_set_level(MAINSRELAY_GPIO, true);  // feed mains to the big transformer
             turningCCW = true;
             startedTic = nowTic;
             startedDegr = pot_get_azimuth();
-            display_turn(STATE_CCW);
+            display_turn(STATE_CW);
         break;
 
         default:
@@ -307,9 +315,9 @@ static void start_timered_turn_callback(void *arg)
 
  void stop_turning(enum reasons reason)
 {
-    gpio_set_level(CCWRELAY_GPIO, false);
-    gpio_set_level(CWRELAY_GPIO, false);
-
+    gpio_set_level(MAINSRELAY_GPIO, false); // take 230v off first, THIS IS IMPORTANT.
+    vTaskDelay(pdMS_TO_TICKS(RELAYSYNCMS));
+    gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // and then 24v
     stoppedTic = esp_timer_get_time();
     queue_state(STATE_STILL, -1, reason);
     display_turn(STATE_STILL);
@@ -491,11 +499,11 @@ void rotator_init(uint8_t *chip)
     static enum directionStates ccw = STATE_CCW;
 
 
-    gpio_reset_pin(CWRELAY_GPIO);
-    gpio_reset_pin(CCWRELAY_GPIO);
+    gpio_reset_pin(DIRECTIONRELAY_GPIO);
+    gpio_reset_pin(MAINSRELAY_GPIO);
 
-    gpio_set_direction(CWRELAY_GPIO,  GPIO_MODE_OUTPUT);
-    gpio_set_direction(CCWRELAY_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(DIRECTIONRELAY_GPIO,  GPIO_MODE_OUTPUT);
+    gpio_set_direction(MAINSRELAY_GPIO, GPIO_MODE_OUTPUT);
 
     const esp_timer_create_args_t start_ccw_args =
     {
