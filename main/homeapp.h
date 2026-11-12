@@ -54,7 +54,6 @@ struct measurement {
         int count;
         int state; // used for buttons
         struct directionCtrl dirstates;
-        //enum directionStates rotatorstate;
         int azimuth;
     } data;
 };
@@ -69,5 +68,7 @@ extern nvs_handle setup_flash;
 #define DIRECTIONRELAY_GPIO      CONFIG_CWRELAY_GPIO
 #define MAINSRELAY_GPIO          CONFIG_CCWRELAY_GPIO
 #define MIN_EPOCH   1650000000
+#define IDLE_ACCURACY   4
+#define ACTIVE_ACCURACY 1
 
 #endif

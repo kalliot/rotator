@@ -10,6 +10,7 @@ extern void pot_set_calibr_low(void);
 extern void pot_set_calibr_high(void);
 extern int pot_get_calibr_low();
 extern int pot_get_calibr_high();
+extern void pot_set_calibrations(int minimum, int maximum);
 extern int pot_get_azimuth(void);
 extern void pot_send_azimuth(void);
 extern void pot_set_tolerance(int tolerance);

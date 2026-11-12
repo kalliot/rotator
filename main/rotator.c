@@ -271,7 +271,7 @@ static void start_turning(enum directionStates direction, int target)
     switch (direction)
     {
         case STATE_CCW:
-            gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // actially this is just for code clarity.
+            gpio_set_level(DIRECTIONRELAY_GPIO, DIRECTION_CCW); // actually this is just for code clarity.
             gpio_set_level(MAINSRELAY_GPIO, true);  // feed mains to the big transformer
             turningCCW = true;
             startedTic = nowTic;
@@ -346,6 +346,7 @@ int rotator_get_turnspeed(void)
         if (turnSeconds > 10 && turnSpeed < (setup.turnSpeed * 0.75))
         {
             stop_turning(REASON_TIMEOUT);
+            pot_set_tolerance(IDLE_ACCURACY);
         }
     }
     return turnSpeed;

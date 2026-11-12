@@ -70,12 +70,23 @@ static void queue_measurement(int azimval, int err)
 }
 
 
+void pot_set_calibrations(int minimum, int maximum)
+{
+    if (xSemaphoreTake(mutex, (TickType_t) 1000) == pdTRUE)
+    {
+        calibr[CAL_MIN].raw  = minimum;
+        calibr[CAL_MAX].raw  = maximum;
+        ESP_LOGI(TAG,"changing calibrations low=%d, high=%d", calibr[CAL_MIN].raw, calibr[CAL_MAX].raw);
+        xSemaphoreGive(mutex);
+    }
+
+}
 void pot_set_calibr_low(void)
 {
     if (xSemaphoreTake(mutex, (TickType_t) 1000) == pdTRUE)
     {
         int rawvalue  = lastRaw;
-        ESP_LOGI(TAG,"changing calibration low %d -> %d\n", calibr[CAL_MIN].raw, rawvalue);
+        ESP_LOGI(TAG,"changing calibration low %d -> %d", calibr[CAL_MIN].raw, rawvalue);
         calibr[CAL_MIN].raw  = rawvalue;
         xSemaphoreGive(mutex);
     }
@@ -88,7 +99,7 @@ void pot_set_calibr_high(void)
     if (xSemaphoreTake(mutex, (TickType_t) 1000) == pdTRUE)
     {
         int rawvalue  = lastRaw;
-        ESP_LOGI(TAG,"changing calibration high %d -> %d\n", calibr[CAL_MAX].raw, rawvalue);
+        ESP_LOGI(TAG,"changing calibration high %d -> %d", calibr[CAL_MAX].raw, rawvalue);
         calibr[CAL_MAX].raw  = rawvalue;
         xSemaphoreGive(mutex);
     }
@@ -206,7 +217,7 @@ void pot_publish_potcalibr(esp_mqtt_client_handle_t client, char *prefix, uint8_
     time_t now;
 
     time(&now);
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"calibrations\",\"min\":%d,\"max\":\"%d\",\"ts\":%jd}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"calibrations\",\"min\":%d,\"max\":%d,\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/calibrations", prefix, name, chipid[3], chipid[4], chipid[5]);
 
@@ -258,7 +269,7 @@ bool pot_init(uint8_t *chip, adc_oneshot_unit_handle_t adc_handle, adc_channel_t
     azimuth = convert(pot_read());
     ESP_LOGI(TAG,"pot_init, first azimuth read is %f", azimuth);
     sampleInterval = intervalMs / samplecnt;
-    xTaskCreate(pot_reader, "pot_reader", 2048, NULL, 10, NULL);
+    xTaskCreatePinnedToCore(pot_reader, "pot_reader", 2048, NULL, 10, NULL, tskNO_AFFINITY);
     return true;
 }
 

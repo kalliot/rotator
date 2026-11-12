@@ -1,9 +1,3 @@
-// goal: 9.10.2026
-// rotation with physical buttons.
-// rotation with json
-// rotation with predefined position (names), a table of known sites.
-
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -227,6 +221,18 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 ota_start(fname);
             }
         }
+        else if (!strcmp(id,"calibrations"))
+        {
+            int minCal = pot_get_calibr_low();
+            int maxCal = pot_get_calibr_high();
+
+            if (getJsonInt(root,"min",&minCal) || getJsonInt(root,"max",&maxCal))
+            {
+                ESP_LOGI(TAG,"changing calibrations low=%d, high=%d", minCal, maxCal);
+                pot_set_calibrations(minCal, maxCal);
+                pot_show_carlibr();
+            }
+        }
         else if (!strcmp(id,"calmax"))
         {
             pot_set_calibr_high();
@@ -254,7 +260,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 else
                 {
                     display_printf(information,"got target %d     ", target);
-                    if (rotator_turn2target(correct2pot(target), target)) pot_set_tolerance(1);
+                    if (rotator_turn2target(correct2pot(target), target)) pot_set_tolerance(ACTIVE_ACCURACY);
                 }
             }
         }
@@ -271,7 +277,7 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
                 {
                     if (rotator_turn2target(correct2pot(targetRec->azimuth), targetRec->azimuth))
                     {
-                        pot_set_tolerance(1);
+                        pot_set_tolerance(ACTIVE_ACCURACY);
                     }
                 }
             }
@@ -306,11 +312,11 @@ static bool handleJson(esp_mqtt_event_handle_t event, uint8_t *chipid)
         {
             if (rotator_turn_bystr(getJsonStr(root,"direction")))
             {
-                pot_set_tolerance(1);
+                pot_set_tolerance(ACTIVE_ACCURACY);
             }
             else
             {
-                pot_set_tolerance(4);
+                pot_set_tolerance(IDLE_ACCURACY);
             }
         }
 
@@ -525,6 +531,7 @@ static void wifi_event_handler(void *event_handler_arg, esp_event_base_t event_b
             retry_num = 0;
             healthyflags |= HEALTHYFLAGS_WIFI;
             display_connections();
+            display_printf(information,"version %s", program_version);
         break;
 
         default:
@@ -668,7 +675,7 @@ void app_main(void)
 
         while (1)
         {
-            if (pot_init(chipid, adc_handle, ADC_CHANNEL_5, 250, 7))
+            if (pot_init(chipid, adc_handle, ADC_CHANNEL_5, 250, 5))
                 break;
             else
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -712,7 +719,7 @@ void app_main(void)
                 ESP_LOGI(TAG, "after inertia, send azimuth");
                 stoppedTs = 0;
                 pot_send_azimuth();
-                pot_set_tolerance(4);
+                pot_set_tolerance(IDLE_ACCURACY);
                 display_printf(information, NULL);
             }
             if(xQueueReceive(evt_queue, &meas, 5 * 1000 / portTICK_PERIOD_MS))
@@ -750,7 +757,7 @@ void app_main(void)
                         ESP_LOGI(TAG,"got buttonstate %d, state=%d", meas.gpio, meas.data.state);
                         if (meas.data.state)
                         {
-                            pot_set_tolerance(1);
+                            pot_set_tolerance(ACTIVE_ACCURACY);
                             if (meas.gpio == CWBUTTON_GPIO) rotator_turn(STATE_CW, REASON_BUTTON);
                             if (meas.gpio == CCWBUTTON_GPIO) rotator_turn(STATE_CCW, REASON_BUTTON);
                         }
