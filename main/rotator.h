@@ -12,6 +12,14 @@ struct rotatorSettings
     int turnSpeed; // speed degrees in 10 sec
 };
 
+enum speedstates {
+    SPEED_NORM,
+    SPEED_LOW,
+    SPEED_HIGH,
+    SPEED_NONE
+};
+
+
 extern void rotator_setsettings(struct rotatorSettings *newsetup);
 extern struct rotatorSettings *rotator_getsettings();
 extern void rotator_show_settings(void);
@@ -22,7 +30,7 @@ extern bool rotator_turn_bystr(char *dirStr);
 extern bool rotator_turned(int azim);
 extern bool rotator_isturning_cw(void);
 extern bool rotator_isturning_ccw(void);
-extern int rotator_get_turnspeed(void);
+extern int rotator_get_turnspeed(enum speedstates *state);
 extern void rotator_init(uint8_t *chip);
 
 

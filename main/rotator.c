@@ -326,7 +326,8 @@ static void start_timered_turn_callback(void *arg)
     startedTic = 0;
 }
 
-int rotator_get_turnspeed(void)
+
+int rotator_get_turnspeed(enum speedstates *state)
 {
     int turnSpeed = 0;
     uint64_t currTic = esp_timer_get_time();
@@ -343,7 +344,13 @@ int rotator_get_turnspeed(void)
     {
         ESP_LOGI(TAG,"turn of %d degrees took %d seconds", degsTurned, turnSeconds);
         ESP_LOGI(TAG,"turn speed was %d degrees / 10sec", turnSpeed);
-        if (turnSeconds > 10 && turnSpeed < (setup.turnSpeed * 0.75))
+        if (turnSpeed < (setup.turnSpeed * 0.90))
+            *state = SPEED_LOW;
+        else if (turnSpeed > (setup.turnSpeed * 1.10))
+            *state = SPEED_HIGH;
+        else
+            *state = SPEED_NORM;
+        if ((turnSeconds > 10) && turnSpeed < (setup.turnSpeed * 0.75))
         {
             stop_turning(REASON_TIMEOUT);
             pot_set_tolerance(IDLE_ACCURACY);

@@ -172,14 +172,34 @@ void display_connections(void)
                                                 (healthyflags & HEALTHYFLAGS_MQTT) ? "MQTT" : "    ");
 }
 
+struct speedStateRec {
+    enum speedstates state;
+    char *statename;
+} speedStateStrings [] =
+{
+    { SPEED_NORM, "norm"},
+    { SPEED_LOW,  "low"},
+    { SPEED_HIGH, "high"},
+    { SPEED_NONE, "none"},
+};
 
-static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, int speed, time_t now)
+char *speedState2str(enum speedstates state)
+{
+    int i;
+    for (i=0; speedStateStrings[i].state != SPEED_NONE; i++)
+    {
+        if (speedStateStrings[i].state == state) break;
+    }
+    return speedStateStrings[i].statename;
+}
+
+static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int azimuth, char *name, int speed, enum speedstates sstate, time_t now)
 {
     char targetTopic[60];
     int retain=1;
 
     if (!isConnected) return false;
-    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"speed\":\"%d\",\"ts\":%jd}";
+    static char *datafmt = "{\"dev\":\"%x%x%x\",\"id\":\"azimuth\",\"value\":%d,\"name\":\"%s\",\"speed\":\"%d\",\"speedstate\":\"%s\",\"ts\":%jd}";
 
     sprintf(targetTopic,"%s/%s/%x%x%x/parameters/azimuth", comminfo->mqtt_prefix, appname, chipid[3], chipid[4], chipid[5]);
 
@@ -193,6 +213,7 @@ static bool sendAzimuth(esp_mqtt_client_handle_t client, uint8_t *chipid, int az
                 azimuth,
                 name,
                 speed,
+                speedState2str(sstate),
                 now);
     esp_mqtt_client_publish(client, targetTopic, jsondata , 0, 0, retain);
     statistics_getptr()->sendcnt++;
@@ -741,15 +762,16 @@ void app_main(void)
                         {
                             stoppedTs = now;
                         }    
-                        int turnspeed = rotator_get_turnspeed();
+                        enum speedstates speedstate = SPEED_NONE;
+                        int turnspeed = rotator_get_turnspeed(&speedstate);
                         // do not send azimuth if rotator is supposed to turn clockwise and azimuth has decreased and wise versa.
                         // when still send azimuth anyway.
                         if (rotator_isturning_ccw() && azimuth < prevAzimuth)
-                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, speedstate, now);
                         else if (rotator_isturning_cw() && azimuth > prevAzimuth)
-                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, speedstate, now);
                         else if (!rotator_isturning_cw() && !rotator_isturning_ccw())
-                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, now);
+                            sendAzimuth(client, chipid, correct2disp(azimuth), name, turnspeed, speedstate, now);
                         prevAzimuth = azimuth;
                     break;
 
