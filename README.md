@@ -15,6 +15,7 @@ calibration and interpolation between calibration points. Esp32 controller shoul
 switch on the alternate current feed to the rotator. This rotator needs 24v ac. One common wire, cw wire and ccw wire.
 Aliexpress sends a nice board having esp32, a tiny power source from 230v to 5v and two relays. This is perfect for me.
 
+![esp32 board](img/esp32_dual_relay.png)
 
 Connections are:
 
