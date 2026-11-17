@@ -3,10 +3,12 @@ esp32 antenna rotator control
 
 Backgound:
 
-I had a Cornell Dubilier AR-40 rotator with a bad controller. First I tried to use a Chinese digital voltmeter as
-a position indicator. Aim: 3.6v is 360 degrees 1.8v is 180 degrees and so on. I just had to feed correct voltage
-to rotators potentiometer. This idea was quite good, but the voltmeter did not show anything under 0.3v. So I would
-be quite blind in small degrees.
+I had a Cornell Dubilier AR-40 rotator with a bad controller. So I decided to build my own controller. I already
+had a 40 year old and non complete power supply project having a 100w 24v transformer in it. Old controllers potentiometer
+is exact copy from what is inside the rotator housing. So I can use this potentiometer as a tabletop test rotator.
+First I tried to use a Chinese digital voltmeter as a position indicator. Aim: 3.6v is 360 degrees 1.8v is 180 degrees 
+and so on. I just had to feed correct voltage to rotators potentiometer. This idea was quite good, but the voltmeter 
+did not show anything under 0.3v. So I would be quite blind in small degrees.
 
 The current idea is to use an esp32 board to read potentiometers analog value and convert this to degrees. Rotators
 potentiometer is 1000 ohm linear, showing whole 360 degrees. It is constructed so that it is like first 360 degrees
@@ -30,7 +32,8 @@ Features:
 2. If connected to a mqtt server via wifi, all control can be done with a web interface.
 3. Web interface allows rotator settings update and simple control.
 4. Web based graphical map interface using openStreetMap and Leaflet library. This interface shows antenna direction
-   like a beam over a map. Turn direction can be done by clicking the map, or by html buttons.
+   like a beam over a map. Turn direction can be done by clicking the map, or by html buttons. These buttons same
+   as the directions mentioned earlier in feature 1. 
 
 ![screenshot](img/rotator_prtsc.png)
 
