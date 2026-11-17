@@ -13,8 +13,10 @@ Features:
    in the display, if antenna is turned close enough to these directions.
 2. If connected to a mqtt server via wifi, all control can be done with a web interface.
 3. Web interface allows rotator settings update and simple control.
-4. Better ui can be done with a openStreetMap interface. This interface shows antenna direction
+4. Web based graphical map interface using openStreetMap and Leaflet library. This interface shows antenna direction
    like a beam over a map. Turn direction can be done by clicking the map, or by html buttons.
+
+   
 
 
 
