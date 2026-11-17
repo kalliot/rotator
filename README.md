@@ -18,5 +18,6 @@ Features:
 
    
 
+![screenshot](img/rotator_prtsc.png)
 
 
