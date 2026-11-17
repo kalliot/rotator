@@ -13,7 +13,14 @@ did not show anything under 0.3v. So I would be quite blind in small degrees.
 The current idea is to use an esp32 board to read potentiometers analog value and convert this to degrees. Rotators
 potentiometer is 1000 ohm linear, showing whole 360 degrees. It is constructed so that it is like first 360 degrees
 of a spring. Voltages received from the potentiometer should be something between 150 mV – 1750 mV. Rest is just
-calibration and interpolation between calibration points. Esp32 controller should also need a pair of relays to 
+calibration and interpolation between calibration points. 
+
+![protoboard](img/IMG_1990.JPG)
+
+In protoboard image, don't let the components around the big potentiometer confuse you. Only the potentiometer is
+used here. All the rest components on the board are just junk from the old controller.
+
+Esp32 controller should also need a pair of relays to 
 switch on the alternate current feed to the rotator. This rotator needs 24v ac. One common wire, cw wire and ccw wire.
 Aliexpress sends a nice board having esp32, a tiny power source from 230v to 5v and two relays. This is perfect for me.
 
