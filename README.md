@@ -53,6 +53,13 @@ Features:
    like a beam over a map. Turn direction can be done by clicking the map, or by html buttons. These buttons same
    as the directions mentioned earlier in feature 1. 
 
+Next picture is from the actual hardware. The casing and transformer were originally ( 40 years ago ) going to be
+a variable voltage power supply. It was staying quite a many years in my store. A short time ago I realized the 
+transformer is perfect to this project, so was the casing too. This is the reason there is cooling fins at the
+back side, and a voltage meter in front. I am using a robust mil-grade connector to the rotator, proto-pcb 
+under the esp32-relay board and so on. Rigid blue wires to the front relay are for 230v to the transformer and
+second relay handles the direction. Rigid black wire comes from transformers 24v coil, via a fuse.
+![hardware](img/IMG1984.JPG)
 
 Following screenshot is from web interface. Background is an OpenStreetmap layer of my hometown Nastola. Home location
 in this map is not my house, it is Nastola Municipal house, currently under demolition. This position is coded in the
