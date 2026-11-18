@@ -62,4 +62,6 @@ The two most top buttons are clockwise and counterclockwise buttons.
 
 ![screenshot](img/rotator_prtsc.png)
 
-
+Rotator software depends heavily on mqtt. [Topics are listed here](docs/topics.md)
+You should have a mosquitto server running somewhere in your network. I have it running in an old raspberry pi.
+This same mosquitto handles all my homesystem messages too.
