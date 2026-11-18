@@ -59,7 +59,7 @@ transformer is perfect to this project, so was the casing too. This is the reaso
 back side, and a voltage meter in front. I am using a robust mil-grade connector to the rotator, proto-pcb 
 under the esp32-relay board and so on. Rigid blue wires to the front relay are for 230v to the transformer and
 second relay handles the direction. Rigid black wire comes from transformers 24v coil, via a fuse.
-![hardware](img/IMG1984.JPG)
+![hardware](img/IMG_1984.JPG)
 
 Following screenshot is from web interface. Background is an OpenStreetmap layer of my hometown Nastola. Home location
 in this map is not my house, it is Nastola Municipal house, currently under demolition. This position is coded in the
