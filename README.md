@@ -20,11 +20,17 @@ calibration and interpolation between calibration points.
 In protoboard image, don't let the components around the big potentiometer confuse you. Only the potentiometer is
 used here. All the rest components on the board are just junk from the old controller.
 
-Esp32 controller should also need a pair of relays to 
-switch on the alternate current feed to the rotator. This rotator needs 24v ac. One common wire, cw wire and ccw wire.
-Aliexpress sends a nice board having esp32, a tiny power source from 230v to 5v and two relays. This is perfect for me.
+Esp32 controller should also need a pair of relays to switch on the alternate current feed to the rotator. 
+This rotator needs 24v ac. One common wire, cw wire and ccw wire. Aliexpress sends a nice board having esp32,
+a tiny power source from 230v to 5v and two relays. This is perfect for me.
 
 ![esp32 board](img/esp32_dual_relay.png)
+
+To show some information in the rotator controller box, I added also a tiny oled display. 
+This is the 4 wire version, using I2C bus. Bus needs two wires in addition to power and ground wires.
+My aim is to use pc/ipad/mobilephone as display, so I don't need a anything special to controllers dash.
+
+![Oled display](img/oled1.3inch.png)
 
 Connections are:
 
@@ -36,11 +42,23 @@ Connections are:
 Features:
 1. Some pre-defined directions can be stored into esp32 flash memory, these directions are shown
    in the display, if antenna is turned close enough to these directions.
-2. If connected to a mqtt server via wifi, all control can be done with a web interface.
-3. Web interface allows rotator settings update and simple control.
+2. If connected to a mqtt server via wifi, all controlling can be done with a web interface.
+3. Web setup interface allows rotator settings update and simple control.
+   settings are: hard-stop - hard stop is not needed to be in 0 degrees, it can be anything between 0 and 359.
+                 inertia seconds - how long time the antenna is rotatin after power is cut after turning.
+                 inertia degrees - how many degrees the turning continues after power cut. This is used to 
+                                   cut the power before the target azimuth is reached.
+                 beamwidht in degrees - for optimising need to turn.
 4. Web based graphical map interface using openStreetMap and Leaflet library. This interface shows antenna direction
    like a beam over a map. Turn direction can be done by clicking the map, or by html buttons. These buttons same
    as the directions mentioned earlier in feature 1. 
+
+
+Following screenshot is from web interface. Background is an OpenStreetmap layer of my hometown Nastola. Home location
+in this map is not my house, it is Nastola Municipal house, currently under demolition. This position is coded in the
+javascript part as default location. Actual home location is received from mqtt, see the description on mqtt topics.
+On right you can see the shortcut buttons of various locations. These locations can be administered with the setup display.
+The two most top buttons are clockwise and counterclockwise buttons. 
 
 ![screenshot](img/rotator_prtsc.png)
 
