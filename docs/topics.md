@@ -9,7 +9,7 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
         "id": "homepos",
         "lat": 60.932521,
         "lng": 25.989413
-    }```
+    }
 
 - BASETOPIC/rotator/ID/names
 - BASETOPIC/rotator/ID/settings
