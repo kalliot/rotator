@@ -58,6 +58,7 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
         }
     ]
     }
+```
 
 - BASETOPIC/rotator/ID/settings
 ```json
@@ -71,6 +72,7 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
     "beamwidth": 10,
     "turnspeed": 45
     }
+```
 
 - BASETOPIC/rotator/ID/state
 ```json
@@ -82,6 +84,7 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
     "target": -1,
     "ts": 1794995422
     }
+```
 
 - BASETOPIC/rotator/ID/calibrations
 ```json
@@ -92,6 +95,7 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
     "max": 3019,
     "ts": 1794922410
     }
+```
 
 - BASETOPIC/rotator/ID/parameters/azimuth
 ```json
@@ -104,3 +108,4 @@ interpretations: BASETOPIC is for example ham, ID is a six character id generate
     "speedstate": "none",
     "ts": 1794995428
     }
+```
