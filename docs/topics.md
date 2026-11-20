@@ -1,147 +1,150 @@
-# Rotator topics
+# Rotator mqtt topics
 
 ## First the topics which are sent by rotator controller ( esp32 )
 interpretations: BASETOPIC is for example ham, ID is a six character id generated from esp32 device id.
 
 
-- BASETOPIC/rotator/ID/info
+###info
+BASETOPIC/rotator/ID/info
 ```json
 {
-"dev": "5be9c0",
-"id": "info",
-"memfree": 202440,
-"idfversion": "v5.2.3",
-"progversion": "0.0.1.4"
+    "dev": "5be9c0",
+    "id": "info",
+    "memfree": 202440,
+    "idfversion": "v5.2.3",
+    "progversion": "0.0.1.4"
 }
 ```
 
-- BASETOPIC/rotator/ID/statistics
+##statistics 
+BASETOPIC/rotator/ID/statistics
 ```json
 {
-"dev": "5be9c0",
-"id": "statistics",
-"connectcnt": 1,
-"disconnectcnt": 1,
-"sendcnt": 3,
-"sensorerrors": 0,
-"max_queued": 1,
-"ts": 1795082926,
-"started": 1795082921,
-"rssi": -78
+    "dev": "5be9c0",
+    "id": "statistics",
+    "connectcnt": 1,
+    "disconnectcnt": 1,
+    "sendcnt": 3,
+    "sensorerrors": 0,
+    "max_queued": 1,
+    "ts": 1795082926,
+    "started": 1795082921,
+    "rssi": -78
 }
 ```
 
-- BASETOPIC/rotator/ID/homepos
+###homepos 
+BASETOPIC/rotator/ID/homepos
 + This should be stored in mosquitto topics with retention flag on. Default position is stored in
   javascript, pointing to Nastola municipal house.
 ```json
 {
-"dev": "5d11a8",
-"id": "homepos",
-"lat": 60.947784,
-"lng": 25.930342
+    "dev": "5d11a8",
+    "id": "homepos",
+    "lat": 60.947784,
+    "lng": 25.930342
 }
 ```
 
 - BASETOPIC/rotator/ID/setup/names
 ```json
 {
-"dev": "5d11a8",
-"id": "nametable",
-"maxnames": 20,
-"ts": 1794922410,
-"names": [
-    {
-    "name": "Kotka",
-    "azimuth": 134
-    },
-    {
-    "name": "Inkoo",
-    "azimuth": 228
-    },
-    {
-    "name": "Vantaa",
-    "azimuth": 216
-    },
-    {
-    "name": "Lahti",
-    "azimuth": 287
-    },
-    {
-    "name": "Kouvola",
-    "azimuth": 100
-    },
-    {
-    "name": "Tallinna",
-    "azimuth": 202
-    },
-    {
-    "name": "Joensuu",
-    "azimuth": 45
-    },
-    {
-    "name": "Jyvaskyla",
-    "azimuth": 355
-    },
-    {
-    "name": "Tampere",
-    "azimuth": 301
-    }
-]
+    "dev": "5d11a8",
+    "id": "nametable",
+    "maxnames": 20,
+    "ts": 1794922410,
+    "names": [
+        {
+        "name": "Kotka",
+        "azimuth": 134
+        },
+        {
+        "name": "Inkoo",
+        "azimuth": 228
+        },
+        {
+        "name": "Vantaa",
+        "azimuth": 216
+        },
+        {
+        "name": "Lahti",
+        "azimuth": 287
+        },
+        {
+        "name": "Kouvola",
+        "azimuth": 100
+        },
+        {
+        "name": "Tallinna",
+        "azimuth": 202
+        },
+        {
+        "name": "Joensuu",
+        "azimuth": 45
+        },
+        {
+        "name": "Jyvaskyla",
+        "azimuth": 355
+        },
+        {
+        "name": "Tampere",
+        "azimuth": 301
+        }
+    ]
 }
 ```
 
 - BASETOPIC/rotator/ID/settings
 ```json
 {
-"dev": "5d11a8",
-"id": "settings",
-"hardstop": 78,
-"ts": 1794922410,
-"inertiams": 1000,
-"inertiadegr": 3,
-"beamwidth": 10,
-"turnspeed": 45
+    "dev": "5d11a8",
+    "id": "settings",
+    "hardstop": 78,
+    "ts": 1794922410,
+    "inertiams": 1000,
+    "inertiadegr": 3,
+    "beamwidth": 10,
+    "turnspeed": 45
 }
 ```
 
 - BASETOPIC/rotator/ID/state
 ```json
 {
-"dev": "5d11a8",
-"id": "movestate",
-"state": "still",
-"reason": "target",
-"target": -1,
-"ts": 1794995422
+    "dev": "5d11a8",
+    "id": "movestate",
+    "state": "still",
+    "reason": "target",
+    "target": -1,
+    "ts": 1794995422
 }
 ```
 
 - BASETOPIC/rotator/ID/calibrations
 ```json
 {
-"dev": "5d11a8",
-"id": "calibrations",
-"min": 37,
-"max": 3019,
-"ts": 1794922410
+    "dev": "5d11a8",
+    "id": "calibrations",
+    "min": 37,
+    "max": 3019,
+    "ts": 1794922410
 }
 ```
 
 - BASETOPIC/rotator/ID/parameters/azimuth
 ```json
 {
-"dev": "5d11a8",
-"id": "azimuth",
-"value": 101,
-"name": "Kouvola",
-"speed": "20",
-"speedstate": "none",
-"ts": 1794995428
+    "dev": "5d11a8",
+    "id": "azimuth",
+    "value": 101,
+    "name": "Kouvola",
+    "speed": "20",
+    "speedstate": "none",
+    "ts": 1794995428
 }
 ```
-## Next the topics which are sent by userinterface. Userinterfaces in this project are
-   rotatormap.html ( map webgui ) and rotator.html (setup webgui).
+## Next the topics which are sent by userinterface. 
+   Userinterfaces in this project are  rotatormap.html ( map webgui ) and rotator.html (setup webgui).
    All the messages from userinterface are the "set" topic. What is actually done
    is decided by the json "id" field.
 
