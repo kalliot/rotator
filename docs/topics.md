@@ -1,14 +1,30 @@
 # Rotator mqtt topics
 
 ## First the topics which are sent by rotator controller ( esp32 )
-interpretations: BASETOPIC is for example ham, ID is a six character id generated from esp32 device id.
++ interpretations: BASETOPIC is for example ham, ID is a six character id generated from esp32 device id.
 
-[info about the system](#info)
-[statistics](#statistics)
-[home location](#homepos)
-[known locations table ie. names](#names) 
-[settings](#settings) 
-[state](#state) 
+- [info about the system](#info)
+- [statistics of the controller](#statistics)
+- [my home location](#homepos)
+- [known locations table ie. names](#names)
+- [rotator specific settings](#settings)
+- [rotation state](#state)
+- [calibrations](#calibrations)
+- [azimuth](#azimuth)
+
++ [topics from rotator to userinterface](#Next-the-topics-which-are-sent-to-userinterface).
+
+- [Calibrate potentiometer digital value of 359 degrees](#calibrate-maximum-degrees)
+- [Calibrate potentiometer digital value of 0 degrees](#calibrate-minimum-degrees)
+- [Save calibrations to flash](#save-calibrations)
+- [Set known calibrations](#set-known-calibrations)
+- [Start turning clockwise](#start-turning-clockwise)
+- [Stop turning, whatever direction](#stop-turning-whatever-direction)
+- [Turn to a named direction](#turn-to-a-named-direction)
+- [Turn to an azimuth](#turn-to-specific-azimuth)
+- [Update or insert data in nametable](#update-or-insert-into-nametable)
+- [Delete from nametable](#delete-from-nametable)
+- [Send new settings to the controller](#send-new-settings-to-the-controller)
 
 ### info
 BASETOPIC/rotator/ID/info
@@ -54,6 +70,7 @@ BASETOPIC/rotator/ID/homepos
 
 ### names 
 - BASETOPIC/rotator/ID/setup/names
+  Table is sent in boot and each time user changes this nametable.
 ```json
 {
     "dev": "5d11a8",
@@ -102,6 +119,11 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### settings
 - BASETOPIC/rotator/ID/settings
+  inertiams is in milliseconds, how long does it take rotation to stop. Inertiadegr is how many degrees antennas turn
+   after rotator power is off after rotation. Beamwidth depends on antenna type. The more elements the sharper the beam.
+   Beamwidth is used to certain optimizations, for example: if current azimuth is 200 degrees and user wants to turn
+   to 202 degrees and this new position is inside beamwidth, rotator does nothing. Turnspeed is average speed rotator
+   turns in 10 seconds. This value is used to interpret speedstate in azimuth message.
 ```json
 {
     "dev": "5d11a8",
@@ -116,6 +138,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### state
 - BASETOPIC/rotator/ID/state
+  state can be still, cw, ccw
 ```json
 {
     "dev": "5d11a8",
@@ -139,6 +162,10 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### azimuth
 - BASETOPIC/rotator/ID/parameters/azimuth
+  Controller sends this message each time the azimuth has changed at leas one degree, while turning.
+  When still, azimuth is sent after 4 degree change. This way the userinterface can show the live
+  azimuth, while turning. If azimuth is close to a named degrees, name is shown as well. Speed is
+  the turning speed degrees per 10sec. Speedstate can be high, low, normal or none.
 ```json
 {
     "dev": "5d11a8",
@@ -150,14 +177,16 @@ BASETOPIC/rotator/ID/homepos
     "ts": 1794995428
 }
 ```
-## Next the topics which are sent by userinterface. 
+## Next the topics which are sent to userinterface
    Userinterfaces in this project are  rotatormap.html ( map webgui ) and rotator.html (setup webgui).
    All the messages from userinterface are the "set" topic. What is actually done
    is decided by the json "id" field.
 
 - home/kallio/rotator/5be9c0/set
-+ calibrate minimum degrees. This has only the digital values of fully counterclockwise.
-  Next message should be executed as follows. Turn rotator fully counterclockwise to hardstop.
+
+### calibrate minimum degrees
++ This has only the digital value of fully counterclockwise potentiometer reading.
+  Message should be executed as follows. Turn rotator fully counterclockwise to hardstop.
   Now push Cal min button in setup ui.
 ```json
 {
@@ -166,8 +195,9 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ calibrate maximum degrees. This has only the digital values of fully clockwise.
-  Next message should be executed as follows. Turn rotator fully clockwise to hardstop.
+### calibrate maximum degrees
++ This has only the digital value of fully clockwise potentiometer reading.
+  Message should be executed as follows. Turn rotator fully clockwise to hardstop.
   Now push Cal max button in setup ui. After min and max calibrations the rotator
   has calibrated potentiometer values in its memory.
 ```json
@@ -177,7 +207,8 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ save calibrations
+### save calibrations
++ Calibration values are saved to controllers flash memory.
 ```json
 {
   "dev": "5be9c0",
@@ -185,8 +216,13 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
+### set known calibrations
 + If you somehow get lost with the calibrations, you can restore them by sending a
   calibrations message. If you happen to have stored them from BASETOPIC/rotator/ID/calibrations message.
+  This might be useful, if the rotator needs different calibrations for different ambient temperatures
+  We have to understand, that the measuring potentiometer is in volatile environment. Outside temperature
+  hera in Finland may wary from -30 to +35 degrees Celcius, depending of the time of year.
+  After this message you need to save the calibrations, if you want them to be in effect after next boot.
 ```json
 {
   "id": "calibrations",
@@ -196,7 +232,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Start turning clockwise
+### start turning clockwise
 ```json
 {
   "dev": "5be9c0",
@@ -205,7 +241,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Start turning counterclockwise
+### start turning counterclockwise
 ```json
 {
   "dev": "5be9c0",
@@ -214,7 +250,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Stop turning, whatever direction.
+### stop turning whatever direction
 ```json
 {
   "dev": "5be9c0",
@@ -223,7 +259,8 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Turn to a named direction. Turning stops automatically, when the
+### turn to a named direction
++ Turning stops automatically, when the
   target direction is reached.
 ```json
 {
@@ -233,7 +270,8 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Turn to specific azimuth. Turning stops, when target is reached.
+### turn to specific azimuth
++ Turning stops, when target is reached.
 ```json
 {
   "dev": "5be9c0",
@@ -242,7 +280,8 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Update/Insert nametable. If both name and direction are missing from the table,
+### update or insert into nametable
++ If both name and direction are missing from the table,
   a new record is inserted. If name is known, but azimuth does not match, azimuth is
   updated. If azimuth is found, update the name.
 ```json
@@ -254,7 +293,8 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Delete from nametable. Key is the name. Delete is not possible to do with azimuth.
+### delete from nametable
++ Key is the name. Delete is not possible to do with azimuth.
 ```json
 {
   "dev": "5be9c0",
@@ -263,7 +303,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
-+ Send new settings to the controller.
+### send new settings to the controller
 ```json
 {
   "dev": "5be9c0",
