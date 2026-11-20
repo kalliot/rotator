@@ -4,7 +4,7 @@
 interpretations: BASETOPIC is for example ham, ID is a six character id generated from esp32 device id.
 
 
-###info
+### info
 BASETOPIC/rotator/ID/info
 ```json
 {
@@ -16,7 +16,7 @@ BASETOPIC/rotator/ID/info
 }
 ```
 
-##statistics 
+## statistics 
 BASETOPIC/rotator/ID/statistics
 ```json
 {
@@ -33,7 +33,7 @@ BASETOPIC/rotator/ID/statistics
 }
 ```
 
-###homepos 
+### homepos 
 BASETOPIC/rotator/ID/homepos
 + This should be stored in mosquitto topics with retention flag on. Default position is stored in
   javascript, pointing to Nastola municipal house.
