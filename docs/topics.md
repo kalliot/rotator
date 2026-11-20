@@ -3,6 +3,12 @@
 ## First the topics which are sent by rotator controller ( esp32 )
 interpretations: BASETOPIC is for example ham, ID is a six character id generated from esp32 device id.
 
+[info about the system](#info)
+[statistics](#statistics)
+[home location](#homepos)
+[known locations table ie. names](#names) 
+[settings](#settings) 
+[state](#state) 
 
 ### info
 BASETOPIC/rotator/ID/info
@@ -46,6 +52,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 
+### names 
 - BASETOPIC/rotator/ID/setup/names
 ```json
 {
@@ -93,7 +100,7 @@ BASETOPIC/rotator/ID/homepos
     ]
 }
 ```
-
+### settings
 - BASETOPIC/rotator/ID/settings
 ```json
 {
@@ -107,7 +114,7 @@ BASETOPIC/rotator/ID/homepos
     "turnspeed": 45
 }
 ```
-
+### state
 - BASETOPIC/rotator/ID/state
 ```json
 {
@@ -119,7 +126,7 @@ BASETOPIC/rotator/ID/homepos
     "ts": 1794995422
 }
 ```
-
+### calibrations
 - BASETOPIC/rotator/ID/calibrations
 ```json
 {
@@ -130,7 +137,7 @@ BASETOPIC/rotator/ID/homepos
     "ts": 1794922410
 }
 ```
-
+### azimuth
 - BASETOPIC/rotator/ID/parameters/azimuth
 ```json
 {
