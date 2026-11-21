@@ -650,10 +650,10 @@ void app_main(void)
     comminfo = get_networkinfo();
     if (comminfo == NULL)
     {
-        display_text("Setup:");
-        display_text("check: 192.168.4.1");
-        display_text(ESP_WIFI_SSID);
-        display_text(ESP_WIFI_PASS);
+        display_printf(0, "Setup:");
+        display_printf(1, "check: 192.168.4.1");
+        display_printf(2, "ssid: %s",ESP_WIFI_SSID);
+        display_printf(3, ESP_WIFI_PASS);
         server_init();
     }
     else

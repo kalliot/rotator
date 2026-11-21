@@ -181,8 +181,8 @@ static const httpd_uri_t form = {
     .uri       = "/",
     .method    = HTTP_GET,
     .handler   = form_get_handler,
-    .user_ctx  = "<html>"
-                 "<body style=\"background-color:dimgray;\" style=\"color:white;\"><table>"
+    .user_ctx  = "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover\">"
+                 "</head><body style=\"background-color:dimgray;\" style=\"color:white;\"><table>"
                  "<form action=\"/\" method=\"get\">"
                  "<tr><td>wlan ssid:</td><td><input type=\"text\" name=\"ssid\"></input></td></tr>"
                  "<tr><td>wlan password:</td><td><input type=\"text\" name=\"password\"></input></td></tr>"

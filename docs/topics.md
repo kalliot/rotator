@@ -28,6 +28,7 @@
 
 ### info
 BASETOPIC/rotator/ID/info
+Topic is updated in boot, immediately after mqtt connection.
 ```json
 {
     "dev": "5be9c0",
@@ -40,6 +41,7 @@ BASETOPIC/rotator/ID/info
 
 ## statistics 
 BASETOPIC/rotator/ID/statistics
+Topic is update after boot, and after an interval about 15 minutes.
 ```json
 {
     "dev": "5be9c0",
@@ -57,8 +59,10 @@ BASETOPIC/rotator/ID/statistics
 
 ### homepos 
 BASETOPIC/rotator/ID/homepos
-+ This should be stored in mosquitto topics with retention flag on. Default position is stored in
-  javascript, pointing to Nastola municipal house.
++ This should be stored in mosquitto topics with retention flag on. Default position is in
+  javascript, pointing to Nastola municipal house. This message overrides the default position.
+  At the moment there is no userinterface to update this topic. You can update topic with a
+  mosquitto_pub command.
 ```json
 {
     "dev": "5d11a8",
@@ -119,11 +123,16 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### settings
 - BASETOPIC/rotator/ID/settings
-  inertiams is in milliseconds, how long does it take rotation to stop. Inertiadegr is how many degrees antennas turn
-   after rotator power is off after rotation. Beamwidth depends on antenna type. The more elements the sharper the beam.
-   Beamwidth is used to certain optimizations, for example: if current azimuth is 200 degrees and user wants to turn
-   to 202 degrees and this new position is inside beamwidth, rotator does nothing. Turnspeed is average speed rotator
-   turns in 10 seconds. This value is used to interpret speedstate in azimuth message.
+  This topic is update after user has update settings. This way every topic listener gets the new updated settings.
+
+   + Inertiams is in milliseconds, how long does it take rotation to stop. Inertiadegr is how many degrees antennas turn
+     after rotator power is off after rotation.
+   + Beamwidth depends on antenna type. The more elements the sharper the beam.
+     Beamwidth is used to certain optimizations, for example: if current azimuth is 200 degrees and user wants to turn
+   to 202 degrees and this new position is inside beamwidth, rotator does nothing.
+   + Turnspeed is average speed rotator turns in 10 seconds. This value is used to interpret speedstate in azimuth message.
+   + Hardstop is the azimuth where your antenna is pointing when rotator is in hardstop. I have realized that hardstop cannot
+     be in north, because I use my antenna for aurora qso:s, so antenna is pointing a little northwest or northeast.
 ```json
 {
     "dev": "5d11a8",
@@ -138,6 +147,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### state
 - BASETOPIC/rotator/ID/state
+  State is updated everytime rotator motor is starting or stopping.
   state can be still, cw, ccw
 ```json
 {
@@ -151,6 +161,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### calibrations
 - BASETOPIC/rotator/ID/calibrations
+  Topic is updated in boot and if calibrations have changed.
 ```json
 {
     "dev": "5d11a8",
@@ -162,7 +173,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 ### azimuth
 - BASETOPIC/rotator/ID/parameters/azimuth
-  Controller sends this message each time the azimuth has changed at leas one degree, while turning.
+  Controller sends this message each time the azimuth has changed at least one degree, while turning.
   When still, azimuth is sent after 4 degree change. This way the userinterface can show the live
   azimuth, while turning. If azimuth is close to a named degrees, name is shown as well. Speed is
   the turning speed degrees per 10sec. Speedstate can be high, low, normal or none.
@@ -178,7 +189,7 @@ BASETOPIC/rotator/ID/homepos
 }
 ```
 ## Next the topics which are sent to userinterface
-   Userinterfaces in this project are  rotatormap.html ( map webgui ) and rotator.html (setup webgui).
+   Userinterfaces in this project are rotatormap.html ( map webgui ) and rotator.html (setup webgui).
    All the messages from userinterface are the "set" topic. What is actually done
    is decided by the json "id" field.
 
@@ -187,7 +198,8 @@ BASETOPIC/rotator/ID/homepos
 ### calibrate minimum degrees
 + This has only the digital value of fully counterclockwise potentiometer reading.
   Message should be executed as follows. Turn rotator fully counterclockwise to hardstop.
-  Now push Cal min button in setup ui.
+  Now push Cal min button in setup ui. Note that this message has no data, it only asks
+  the rotator store current potentiometer to calibration variable.
 ```json
 {
   "dev": "5be9c0",
@@ -196,7 +208,8 @@ BASETOPIC/rotator/ID/homepos
 ```
 
 ### calibrate maximum degrees
-+ This has only the digital value of fully clockwise potentiometer reading.
++ This has only the digital value of fully clockwise potentiometer reading. This message
+  is only a command, it does not have any data.
   Message should be executed as follows. Turn rotator fully clockwise to hardstop.
   Now push Cal max button in setup ui. After min and max calibrations the rotator
   has calibrated potentiometer values in its memory.
@@ -208,7 +221,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 
 ### save calibrations
-+ Calibration values are saved to controllers flash memory.
++ Calibration values are saved from ram memory to controllers flash memory.
 ```json
 {
   "dev": "5be9c0",

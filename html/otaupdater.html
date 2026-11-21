@@ -1,0 +1,224 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+   <style>
+      .rouge {background-color: rgb(59, 2, 2); color:rgb(253, 178, 178); font-weight:bold}
+      .bleu {background-color: rgba(1, 16, 99, 0.979); color:rgb(100, 219, 255)}
+      .jaune {background-color: rgb(53, 39, 1); color: rgb(253, 223, 168)}
+      .blanc {background-color: rgb(0, 0, 0); color: rgb(253, 253, 253)}
+   </style>   
+
+  <head>
+    <title id="myTitle">Firmware</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="mqttws31.js" type="text/javascript"></script>
+    <script src="jquery.min.js" type="text/javascript"></script>
+    
+    <script src="config.js" type="text/javascript"></script>
+    <link rel="stylesheet" href="setup.css" type="text/css">
+    <script type="text/javascript">
+    var mqtt;
+    var reconnectTimeout = 10000;
+    var myDevice = "none";
+    var myType = "none";
+
+
+    function MQTTconnect() {
+        mqtt = new Paho.MQTT.Client(
+                        host,
+                        port,
+                        "web_" + parseInt(Math.random() * 100,
+                        10));
+        var options = {
+            timeout: 3,
+            useSSL: useTLS,
+            cleanSession: false,
+            onSuccess: onConnect,
+            onFailure: function (message) {
+                $('#status').val("Connection failed: " + message.errorMessage + "Retrying");
+                setTimeout(MQTTconnect, reconnectTimeout);
+            }
+        };
+
+        mqtt.onConnectionLost = onConnectionLost;
+        mqtt.onMessageArrived = onMessageArrived;
+
+        if (username != null) {
+            options.userName = username;
+            options.password = password;
+        }
+        console.log("Host="+ host + ", port=" + port + " TLS = " + useTLS + " username=" + username + " password=" + password);
+        mqtt.connect(options);
+    }
+
+
+    function onConnect() {
+        // Connection succeeded; subscribe to our topic
+        console.log("connected, myDevice is", myDevice);
+        mqtt.subscribe(baseTopic + "/ota/#", {qos: 0});
+        mqtt.subscribe(baseTopic + "/" + myType + "/" + myDevice + "/otaupdate", {qos: 0});
+        mqtt.subscribe(baseTopic + "/" + myType + "/" + myDevice + "/info", {qos: 0});
+        mqtt.subscribe(baseTopic + "/" + myType + "/" + myDevice + "/statistics", {qos: 0});
+        mqtt.subscribe(baseTopic + "/" + myDevice , {qos: 0});
+    }
+
+
+    function onConnectionLost(response) {
+        console.log("connection lost");
+        setTimeout(MQTTconnect, reconnectTimeout);
+    };
+
+    
+    function startupdate()
+    {
+        // ask the filesize to show progress bar correctly
+        content = '{"id": "getfilesize"' + 
+              ',"file":"' + $('#upgrade').val() + '"}';
+        topic = baseTopic + "/ota/getfilesize";
+        console.log(topic, content);
+        mqtt.send(topic, content, 0 , false);
+
+        content = '{"dev":"' + myDevice +'", "id": "otaupdate"' + 
+              ',"file":"' + $('#upgrade').val() + '"}';
+        topic = baseTopic + "/" + myType + "/" + myDevice + "/otaupdate";
+        console.log(topic, content);
+        mqtt.send(topic, content, 0 , false);
+        return;
+    }
+
+    function timeredColor(id, newest)
+    {
+        if (myType != newest.substring(0,myType.length))
+            return;
+        compare = $(id).text();
+        console.log(compare, newest);
+        newestVer = newest.substring(myType.length + 1)
+        console.log(compare, newestVer, compare.length);
+        if (newest != '' && newestVer != compare)
+            color = 'rouge';
+        else    
+            color = 'blanc';
+        $(id).attr("class", color);
+    }
+
+
+    function onMessageArrived(message) {
+
+        var topic = message.destinationName;
+        var payload = message.payloadString;
+    
+        const obj = JSON.parse(payload);
+     
+        if (obj.id == "otaupdate")
+        {
+            $('.download').show();
+        }
+        if (obj.id == "filesize")
+        {
+            console.log('filesize', obj.size);
+            $('#progress').attr('max', obj.size)
+        }
+        if (obj.id == "binaries")
+        {
+            if (myType == "sensors") 
+                files = obj.sensors;
+            else if (myType == "thermostat")
+                files = obj.thermostat;
+            else if (myType == "refrigerator")
+                files = obj.refrigerator;
+            else if (myType == "simulator")
+                files = obj.simulator;
+            else if (myType == "rgb7segdisplay")
+                files = obj.rgb7segdisplay;
+            else if (myType == "rotator") 
+                files = obj.rotator;
+
+            $('#upgrade').empty();
+            count = 0;
+
+            for (file of files)
+            {
+                selected = '';
+                if (file == obj.newest)
+                {
+                    selected = 'selected=selected';
+                }
+                content = '<option value="' + file + '"' + selected + '>' + file + '</option>';
+                console.log("adding", content);
+                $('#upgrade').append(content);
+                count++;
+            }
+            if (count) $('#updform').show();
+
+            setTimeout(() => {timeredColor('#progver',obj.newest);},100);
+
+        }
+        if (obj.dev != myDevice) return;
+
+        if (obj.id == "info")
+        {
+            console.log('got info');
+            $('#progver').html(obj.progversion);
+            $('#memfree').html(obj.memfree);
+            $('#idfversion').html(obj.idfversion);
+            setTimeout(() => {timeredColor('#progver',obj.progversion);},100);
+        }
+        if (obj.id == "statistics")
+        {
+            $('#connectcnt').html(obj.connectcnt);
+            $('#disconnectcnt').html(obj.disconnectcnt);
+            $('#sendcnt').html(obj.sendcnt);
+            $('#sensorerrors').html(obj.sensorerrors);
+            $('#max_queued').html(obj.max_queued);
+            $('#rssi').html(obj.rssi);
+
+            const d = new Date(obj.started * 1000);
+            $('#started').html(d.toISOString());
+        }
+        if (obj.id == "otastatus")
+        {
+            if (obj.value != 0) $('#progress').val(obj.value) 
+            else setTimeout(() => {$('.download').hide();},1000);
+            $('#bytes').html(obj.value);
+            $('#error').html(obj.err);
+        }
+    };
+
+
+    $(document).ready(function() {
+        myDevice = (new URL(location.href)).searchParams.get('dev');
+        myType = (new URL(location.href)).searchParams.get('type');
+        console.log(myDevice);
+        $('#heading').html('Firmware ' + myDevice + ' ' + myType);
+        $('#myTitle').text('Firmware ' + myDevice + ' ' + myType);
+        MQTTconnect();
+    });
+
+    </script>
+  </head>
+  <body style="background-color:rgb(35, 39, 39); color:white;">
+    <h1 id="heading">Firmware</h1>
+    <div>
+        <table>
+            <tr><td>Program version</td><td id="progver" class="blanc"></td></tr>
+            <tr><td>Free memory</td><td id="memfree"></td></tr>
+            <tr><td>Idf version</td><td id="idfversion"></td></tr>
+            <tr><td>Connect count</td><td id="connectcnt"></td><td>Disconnect count</td><td id="disconnectcnt"></td></tr>
+            <tr><td>Send count</td><td id="sendcnt"></td><td>Sensor errors</td><td id="sensorerrors"></td></tr>
+            <tr><td>Max queued</td><td id="max_queued"></td><td>rssi</td><td id="rssi"></td></tr>
+            <tr><td>Started</td><td id="started"></td></tr>
+            <tr class="download" hidden="true"><td>Bytes transferred</td><td id="bytes"></td><td><progress id="progress" value="0" max="100"></progress></td></tr>
+            <tr class="download" hidden="true"><td>Transfer error</td><td id="error" width="260"></td></tr>
+        </table>
+    </div>
+    <div><form id="updform" hidden="true"><label for="upgrade">Upgrade </label><select id="upgrade"></select>
+                                          <button type="button" id="updbutton" onClick="startupdate()">Start update</button>
+        </form>
+    </div>
+  </body>
+</html>
+
+
+	
+
+   
+
+	

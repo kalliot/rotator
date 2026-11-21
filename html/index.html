@@ -1,0 +1,186 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Devices</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="mqttws31.js" type="text/javascript"></script>
+    <script src="jquery.min.js" type="text/javascript"></script>
+    
+    <script src="config.js" type="text/javascript"></script>
+    <link rel="stylesheet" href="setup.css" type="text/css">
+    <script type="text/javascript">
+    var mqtt;
+    var reconnectTimeout = 10000;
+
+
+    function MQTTconnect() {
+        mqtt = new Paho.MQTT.Client(
+                        host,
+                        port,
+                        "web_" + parseInt(Math.random() * 100,
+                        10));
+        var options = {
+            timeout: 3,
+            useSSL: useTLS,
+            cleanSession: false,
+            onSuccess: onConnect,
+            onFailure: function (message) {
+                $('#status').val("Connection failed: " + message.errorMessage + "Retrying");
+                setTimeout(MQTTconnect, reconnectTimeout);
+            }
+        };
+
+        mqtt.onConnectionLost = onConnectionLost;
+        mqtt.onMessageArrived = onMessageArrived;
+
+        if (username != null) {
+            options.userName = username;
+            options.password = password;
+        }
+        console.log("Host="+ host + ", port=" + port + " TLS = " + useTLS + " username=" + username + " password=" + password);
+        mqtt.connect(options);
+    }
+
+
+    function showDetails(devid)
+    {
+        devtype = $('#T' + devid).val();
+        console.log('formid = ' + devid + ' type = ' + devtype);
+        window.open(devtype + '.html?dev=' + devid);
+        return false;
+    }
+
+    function showFirmware(devid)
+    {
+        devtype = $('#T' + devid).val();
+        console.log('formid = ' + devid + ' type = ' + devtype);
+        window.open('otaupdater.html?dev=' + devid + '&type=' + devtype);
+        return false;
+    }
+
+    function showMapGui(devid)
+    {
+        devtype = $('#T' + devid).val();
+        if (devtype == 'rotator')
+        {
+            console.log('formid = ' + devid + ' type = ' + devtype);
+            window.open('rotatormap.html?dev=' + devid);
+        }    
+        return false;
+    }
+
+
+
+    function onConnect() {
+        // Connection succeeded; subscribe to our topic
+        console.log("connected");
+        mqtt.subscribe(baseTopic + "/devices/#", {qos: 0});
+    }
+
+
+    function onConnectionLost(response) {
+        console.log("connection lost");
+        setTimeout(MQTTconnect, reconnectTimeout);
+    };
+
+    function timeredFunc(dev)
+    {
+        $('#TR_'+ dev).remove();
+        $('#TRD_'+ dev).remove();
+    }
+
+
+    function onMessageArrived(message) {
+
+        var topic = message.destinationName;
+        var payload = message.payloadString;
+    
+        const obj = JSON.parse(payload);
+        if (obj.id == "info")
+        {
+            console.log("got info from device ",obj.dev)
+            return true;
+        }
+        if (obj.id == "statistics")
+        {
+            console.log("got statistics from device ",obj.dev)
+            uptime = obj.ts - obj.started;
+            if (uptime)
+            {
+                uptime = Math.round(uptime / 3600);
+            }
+            $("#info" + obj.dev).html("uptime " + uptime + " hours");
+            return true;
+        }
+
+        if (obj.id == "device")
+        {
+            console.log("got a device " + obj.dev);
+            btnStyle = '';
+            if (obj.connected == 0)
+            {
+                btnColor = 'gray';
+                setTimeout(() => {timeredFunc(obj.dev);},10);
+            }    
+            else
+            {
+
+                btnColor = 'black';
+                mqtt.subscribe(baseTopic + "/" + obj.type + "/" + obj.dev + "/statistics", {qos: 0});
+            }
+            len = $("#T" + obj.dev).length; 
+            console.log("length is ", len);
+            if (len == 0) 
+            {
+                console.log('style="color:' + btnColor + ';"');
+                devstr = '<tr id="TR_' + obj.dev + '"><form id="F' + obj.dev + '"><td><input type="text" readonly id="D' + obj.dev + '" size=10 value="'+ obj.dev +
+                                    '"/></td><td><input type="text" readonly id="T' + obj.dev + '" size=10 value="' + obj.type + 
+                                    '"/></td><td><button id="F' + obj.dev + '" style="color:' + btnColor + ';" onClick=showDetails("' + obj.dev + '")>Details</button>' +
+                                    '<td><button id="B' + obj.dev + '" style="color:' + btnColor + ';" onClick=showFirmware("' + obj.dev + '")>Firmware</button></form></td>';
+                if (obj.type == 'rotator')
+                {
+                    devstr = devstr + '<td><button id="M' + obj.dev + '" style="color:' + btnColor + ';" onClick=showMapGui("' + obj.dev + '")>Map gui</button></form></td></tr>';
+                }                    
+                else
+                {
+                    devstr = devstr + '</form></td></tr>';
+                }    
+                $('#devices').append(devstr);
+                $('#devices').append('<tr id="TRD_' + obj.dev + '"><td></td><td colspan="2" id="info' + obj.dev + '">No info available</td></tr>');
+            }
+            else
+            {
+                $("#B" + obj.dev).css('color',btnColor);
+                $("#V" + obj.dev).css('color',btnColor);
+                $("#M" + obj.dev).css('color',btnColor);
+            }
+        }
+    };
+
+
+    $(document).ready(function() {
+        MQTTconnect();
+    });
+
+    </script>
+  </head>
+  <body style="background-color:rgb(35, 39, 39); color:white;">
+    <h1>List of devices</h1>
+    <div>
+        <table><tr><td>
+        <form> 
+            <table id="devices">
+            <tr><thead><th>Device</th><th>Type</th></thead></tr>
+            </table>
+        </form>
+        </td>
+        </tr></table>
+    </div>
+  </body>
+</html>
+
+
+	
+
+   
+
+	

@@ -23,8 +23,10 @@ static void reset_reader(void *arg)
         if (xSemaphoreTake(xSemaphore, portMAX_DELAY)) {
             vTaskDelay(100 / portTICK_PERIOD_MS); // wait for all glitches
             if (gpio_get_level(reset_gpio) == 0) {
-                flash_erase_all(setup_flash);
-                flash_commitchanges(setup_flash);
+                nvs_handle wifi_flash = flash_open("wifisetup");
+                flash_erase_all(wifi_flash);
+                flash_commitchanges(wifi_flash);
+                ESP_LOGI(TAG,"**** wifi flash erased ****");
                 ESP_LOGI(TAG,"**** restarting ****");
                 vTaskDelay(200 / portTICK_PERIOD_MS); 
                 esp_restart();
