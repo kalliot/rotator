@@ -15,7 +15,7 @@ potentiometer is 1000 ohm linear, showing whole 360 degrees. It is constructed s
 of a spring. Voltages received from the potentiometer should be something between 150 mV – 1750 mV. Rest is just
 calibration and interpolation between calibration points. 
 
-![protoboard](img/IMG_1990.JPG)
+![protoboard](img/proto.jpg)
 
 In protoboard image, don't let the components around the big potentiometer confuse you. Only the potentiometer is
 used here. All the rest components on the board are just junk from the old controller.
@@ -30,7 +30,7 @@ To show some information in the rotator controller box, I added also a tiny oled
 This is the 4 wire version, using I2C bus. Bus needs two wires in addition to power and ground wires.
 My aim is to use pc/ipad/mobilephone as display, so I don't need a anything special to controllers dash.
 
-![Oled display](img/oled1.3inch.png)
+![Oled display](img/oled.png)
 
 Connections are:
 
@@ -59,7 +59,12 @@ transformer is perfect to this project, so was the casing too. This is the reaso
 back side, and a voltage meter in front. I am using a robust mil-grade connector to the rotator, proto-pcb 
 under the esp32-relay board and so on. Rigid blue wires to the front relay are for 230v to the transformer and
 second relay handles the direction. Rigid black wire comes from transformers 24v coil, via a fuse.
-![hardware](img/IMG_1984.JPG)
+![hardware](img/casing_open.jpg)
+
+Next is a screenshot of the setup display. There already one shortcut city under edit, I have clicked line of the city,
+it is marked with red and copiec on working line. Name and azimuth can be edited there and saved from the button right.
+
+![screenshot](img/setup.png)
 
 Following screenshot is from web interface. Background is an OpenStreetmap layer of my hometown Nastola. Home location
 in this map is not my house, it is Nastola Municipal house, currently under demolition. This position is coded in the

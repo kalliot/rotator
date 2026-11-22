@@ -118,17 +118,7 @@
         }
         if (obj.id == "binaries")
         {
-            if (myType == "sensors") 
-                files = obj.sensors;
-            else if (myType == "thermostat")
-                files = obj.thermostat;
-            else if (myType == "refrigerator")
-                files = obj.refrigerator;
-            else if (myType == "simulator")
-                files = obj.simulator;
-            else if (myType == "rgb7segdisplay")
-                files = obj.rgb7segdisplay;
-            else if (myType == "rotator") 
+            if (myType == "rotator")
                 files = obj.rotator;
 
             $('#upgrade').empty();

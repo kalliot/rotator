@@ -196,8 +196,7 @@ BASETOPIC/rotator/ID/homepos
 - home/kallio/rotator/5be9c0/set
 
 ### calibrate minimum degrees
-+ This has only the digital value of fully counterclockwise potentiometer reading.
-  Message should be executed as follows. Turn rotator fully counterclockwise to hardstop.
++ Message should be executed as follows. Turn rotator fully counterclockwise to hardstop.
   Now push Cal min button in setup ui. Note that this message has no data, it only asks
   the rotator store current potentiometer to calibration variable.
 ```json
@@ -208,8 +207,7 @@ BASETOPIC/rotator/ID/homepos
 ```
 
 ### calibrate maximum degrees
-+ This has only the digital value of fully clockwise potentiometer reading. This message
-  is only a command, it does not have any data.
++ This message is only a command, it does not have any data.
   Message should be executed as follows. Turn rotator fully clockwise to hardstop.
   Now push Cal max button in setup ui. After min and max calibrations the rotator
   has calibrated potentiometer values in its memory.

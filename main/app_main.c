@@ -394,8 +394,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         device_sendstatus(client, comminfo->mqtt_prefix, appname, (uint8_t *) handler_args);
         isConnected = true;
         statistics_getptr()->connectcnt++;
-        pot_show_carlibr();
         sendInfo(client, (uint8_t *) handler_args);
+        pot_show_carlibr();
         azimdb_show();
         healthyflags |= HEALTHYFLAGS_MQTT;
         display_connections();
