@@ -24,6 +24,16 @@
 			height: 100%;
 			width: 100vw;
 		}
+		.degree-label {
+			font-family: sans-serif;
+			font-size: 15px;
+			font-weight: bold;
+			color: #ffffff;
+			text-shadow: 0 0 3px #1a1a1a, 0 0 3px #1a1a1a;
+			text-align: center;
+			white-space: nowrap;
+			pointer-events: none;
+		}
 		button {
 			width: 99%;
 			height: 35px; 
@@ -92,6 +102,7 @@
 	var reconnectTimeout = 10000;
 	var homeLat = 60.947784; // Initial antenna position is Nastola
 	var homeLng = 25.930342; // municipal building. Demolition is going now...
+	var decrOverlayGroup;
 
 	function calculateAzimuth(lat1, lon1, lat2, lon2) {
 		// Convert degrees to radians
@@ -151,29 +162,75 @@
 
 	function zoom2beamLen(zoomLevel)
 	{
-		var meters = [2500000,
-		              2500000,
+		var meters = [9500000,
+		              8500000,
+					  7500000,
+					  5500000,
 					  2500000,
-					  2500000,
-					  1900000,
 		              1000000,
-					   600000,
-					   350000,
+					   700000,
+					   400000,
 					   250000,
 					   150000,
 					   70000,
 					   40000,
 					   15000,
 					   8000,
-					   6000,
+					   5000,
 					   2000,
-					   1500,
+					   1200,
 					   450,
 					   250];
 		console.log(zoomLevel,meters[zoomLevel-1]);
 		return meters[zoomLevel-1];
 	}
 	
+	function drawDegreeCircle(map, center, radiusMeters, stepDeg = 10, labelStepDeg = 30)
+	{
+      const circlePoints = [];
+
+      // Center anchor marker
+      L.circleMarker(center, {
+        radius: 4,
+        color: '#ffffff',
+        fillColor: '#ffffff',
+        fillOpacity: 1
+      }).addTo(decrOverlayGroup);
+
+      // Generate circle ring, ticks, and labels
+      for (let deg = 0; deg < 360; deg += 1) {
+        const outerPt = getDestinationPoint(center[0], center[1], deg, radiusMeters);
+        circlePoints.push(outerPt);
+
+        // Add tick marks at every stepDeg
+        if (deg % stepDeg === 0) {
+          const isMajor = deg % labelStepDeg === 0;
+          const tickLength = isMajor ? radiusMeters * 0.08 : radiusMeters * 0.04;
+          const innerPt = getDestinationPoint(center[0], center[1], deg, radiusMeters - tickLength);
+
+          L.polyline([innerPt, outerPt], {
+            color: '#ffffff',
+            weight: isMajor ? 2 : 1,
+            interactive: false
+          }).addTo(decrOverlayGroup);
+        }
+
+        // Add degree labels at every labelStepDeg
+        if (deg % labelStepDeg === 0) {
+          const labelPt = getDestinationPoint(center[0], center[1], deg, radiusMeters * 1.12);
+          const labelText = deg === 0 ? '0° (N)' : `${deg}°`;
+
+          const icon = L.divIcon({
+            className: 'degree-label',
+            html: labelText,
+            iconSize: 10,
+            iconAnchor: [20, 8]
+          });
+
+          L.marker(labelPt, { icon, interactive: false }).addTo(decrOverlayGroup);
+        }
+      }
+	}
 
 	function buildPolygon(length, angle)
 	{
@@ -251,9 +308,11 @@
 		currZoom = zoomLevel;
 
 		length = zoom2beamLen(zoomLevel);
-		console.log("length = ", length);
 		if (targetVisible) targetPolygon.setLatLngs(buildPolygon(length, currentAngle));
 		rotatorPolygon.setLatLngs(buildPolygon(length, parseInt($('#beamAngle').html())));
+		map.removeLayer(decrOverlayGroup);
+		decrOverlayGroup = L.layerGroup().addTo(map);
+		drawDegreeCircle(map, [homeLat, homeLng], length / 8, 10, 30);
 	}
 
 	function turnBeam(angle) {
@@ -314,10 +373,12 @@
 		console.log('zoomlevel is', e.target._zoom);
 	});
 
-
+	decrOverlayGroup = L.layerGroup().addTo(map);
 	targetPolygon = createBeam('red', 'This is a target direction.',5);
 	rotatorPolygon = createBeam('lightblue', 'Not turning, i am close to the beam.',zoom2beamLen(currZoom));
 	homeCircle = createCircle('lightblue', homeLat, homeLng);
+	decrOverlayGroup = L.layerGroup().addTo(map);
+	drawDegreeCircle(map, [homeLat, homeLng], 200, 10, 30);
 
     function MQTTconnect() 
 	{
