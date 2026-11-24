@@ -20,5 +20,5 @@ cd srv/ota
 put build/rotator.bin $FNAME
 EOF
 FILESIZE="$(stat -c%s build/rotator.bin)"
-mosquitto_pub -h 192.168.101.231 -t 'home/kallio/ota/fileschanged' -m $message
+mosquitto_pub -h 192.168.101.231 -t 'ham/ota/fileschanged' -m $message
 

@@ -83,6 +83,7 @@
     var targetPolygon;
 	var rotatorPolygon;
 	var currentAngle = 0;
+	var homeCircle;
 	var currZoom = 16;
 	var targetVisible = false;
 	var hilitedPosButton = '-';
@@ -148,15 +149,6 @@
 	}).addTo(map);
 
 
-	const circle = L.circle([homeLat, homeLng], 
-	{
-		color: 'blue',
-		fillColor: '#f03',
-		fillOpacity: 0.1,
-		radius: 3
-	}).addTo(map).bindPopup('Home.');
-
-
 	function zoom2beamLen(zoomLevel)
 	{
 		var meters = [2500000,
@@ -206,9 +198,19 @@
 		];
 	}
 
-	function createBeam(color, info) {map
-		length = zoom2beamLen(currZoom);
-		
+	function createCircle(color, homeLat, homeLng)
+	{
+		return L.circle([homeLat, homeLng],
+		{
+			color: color,
+			fillColor: '#f03',
+			fillOpacity: 0.1,
+			radius: 3
+		}).addTo(map).bindPopup('Home.');
+	}
+
+	function createBeam(color, info, length)
+	{
 		const point1 = getDestinationPoint(homeLat, homeLng, 360 - beamWidth / 2, length);
 		const latlngs1 = [[homeLat, homeLng], point1];
 
@@ -313,8 +315,9 @@
 	});
 
 
-	targetPolygon = createBeam('red', 'This is a target direction.');
-	rotatorPolygon = createBeam('lightblue', 'Not turning, i am close to the beam.');
+	targetPolygon = createBeam('red', 'This is a target direction.',5);
+	rotatorPolygon = createBeam('lightblue', 'Not turning, i am close to the beam.',zoom2beamLen(currZoom));
+	homeCircle = createCircle('lightblue', homeLat, homeLng);
 
     function MQTTconnect() 
 	{
@@ -387,6 +390,7 @@
 			homeLat = obj.lat;
 			homeLng = obj.lng;
 			map.panTo({ lat: homeLat, lon: homeLng});
+			homeCircle.setLatLng([homeLat, homeLng]);
 			onZoomed(currZoom);
 		}
 		else if (obj.id == "settings")
