@@ -21,8 +21,8 @@ In protoboard image, don't let the components around the big potentiometer confu
 used here. All the rest components on the board are just junk from the old controller.
 
 Esp32 controller should also need a pair of relays to switch on the alternate current feed to the rotator. 
-This rotator needs 24v ac. One common wire, cw wire and ccw wire. Aliexpress sends a nice board having esp32,
-a tiny power source from 230v to 5v and two relays. This is perfect for me.
+This rotator needs 24v ac. One common wire, cw wire and ccw wire. Aliexpress sells a nice ![board](https://devices.esphome.io/devices/esp32-relay-x2/) 
+having esp32,a tiny power source from 230v to 5v and two relays. This is perfect for me. 
 
 ![esp32 board](img/esp32_dual_relay.png)
 
